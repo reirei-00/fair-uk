@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from lm_eval.fair_uk import VERSION
+from lm_eval.fair_uk.answers import NORMALIZED, POLICIES
 from lm_eval.fair_uk.data import REGISTRY, load, select_clusters
 from lm_eval.fair_uk.metrics import make_report, score_all
 from lm_eval.fair_uk.provenance import code_identity
@@ -42,6 +43,7 @@ def main(argv=None):
             sub.add_argument("--output", type=Path, required=True)
             sub.add_argument("--bootstrap", type=int, default=1000)
             sub.add_argument("--seed", type=int, default=42)
+            sub.add_argument("--answer-policy", choices=POLICIES, default=NORMALIZED)
         if command == "run":
             sub.add_argument("--model", default="hf", help="Harness model backend")
             sub.add_argument("--model-args", required=True)
@@ -75,6 +77,7 @@ def main(argv=None):
     compare.add_argument("--output", type=Path, required=True)
     compare.add_argument("--bootstrap", type=int, default=1000)
     compare.add_argument("--seed", type=int, default=42)
+    compare.add_argument("--answer-policy", choices=POLICIES, default=NORMALIZED)
     summary = commands.add_parser(
         "summarize", help="Build model-by-task experiment tables"
     )
@@ -95,6 +98,7 @@ def main(argv=None):
             args.en_input,
             args.bootstrap,
             args.seed,
+            answer_policy=args.answer_policy,
         )
         args.output.mkdir(parents=True, exist_ok=True)
         write_json(args.output / "comparison.json", report)
@@ -148,6 +152,8 @@ def main(argv=None):
         "selected_rows": len(rows),
         "limit_clusters_per_stratum": args.limit_clusters_per_stratum,
     }
+    if args.task.startswith("warbias_"):
+        run["scoring_policy"] = args.answer_policy
     if args.command == "run":
         from lm_eval.api.registry import get_model
         from lm_eval.fair_uk.provenance import model_identity
@@ -220,14 +226,19 @@ def main(argv=None):
             ).hexdigest(),
             model_identity="external_predictions_not_verified",
         )
-    scored = score_all(rows, predictions)
+    scored = score_all(rows, predictions, args.answer_policy)
     report = make_report(scored, registry_rows, args.bootstrap, args.seed)
     report["provenance"] = run
     if args.command == "run-openai":
         from lm_eval.fair_uk.openai_runner import usage_summary
 
         report["api_usage"] = usage_summary(predictions, args.snapshot)
-    report.update(tool="Fair-UK", version=VERSION, report_schema_version=1)
+    report.update(
+        tool="Fair-UK",
+        version=VERSION,
+        report_schema_version=2,
+        scorer_code_identity=code_identity(),
+    )
     if args.command == "run-gemini":
         from lm_eval.fair_uk.gemini_runner import usage_summary
 

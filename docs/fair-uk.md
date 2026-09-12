@@ -36,7 +36,7 @@ Every task has an immutable dataset revision, filename, expected row count and S
 
 | Task | Rows | Protocol |
 | --- | ---: | --- |
-| `warbias_uk`, `warbias_en` | 240 each | Strict generated A/B/C; six context/polarity variants per source case |
+| `warbias_uk`, `warbias_en` | 240 each | A/B/C generation prompt; versioned answer parsing; six context/polarity variants per source case |
 | `warbias_intersectional_uk`, `warbias_intersectional_en` | 1,320 each | Same generation protocol, with 11 shared demographic profiles across the two statuses |
 | `bbq_uk` | 58,492 | Mean answer-token log probability, averaged over three cyclic answer orders |
 | `stereoset_uk` | 949 | Mean full-sentence causal token log probability; target-macro SS, LMS and ICAT |
@@ -74,7 +74,20 @@ fair-uk-eval score \
 
 For a limited run, repeat the same `--limit-clusters-per-stratum` setting when rescoring. Missing, duplicate and unexpected prediction IDs are errors. External prediction files are identified by checksum; the scorer does not independently certify their model identity.
 
-WarBias external records use `{"id": "...", "response": "A"}`. Only A/B/C after trimming whitespace and uppercasing is accepted. Extra explanations, punctuation, refusals and Cyrillic lookalike letters are invalid, not unknown answers.
+WarBias external records use `{"id": "...", "response": "A"}`. The default answer policy is `abc_option_text_v2`. It accepts:
+
+- A single ASCII A/B/C, ignoring case and surrounding whitespace.
+- A letter followed by one `.`, `!` or `)`, such as `C.`.
+- A letter followed by `.`, `)` or `:` and its exact matching option text.
+- Exact option text by itself when it uniquely identifies a choice.
+
+Option text is normalized only for Unicode composition and whitespace. No paraphrase matching or answer extraction from explanations is performed. Conflicting labels/text, refusals, truncated explanations and Cyrillic lookalike letters remain invalid. The parser does not inspect gold labels or demographic metadata.
+
+Semantic correctness and strict format compliance are separate. Reports retain raw responses, parsing method, semantic `invalid`, `format_violation`, and strict-format accuracy. `format_violation` is an instruction-compliance diagnostic, not a bias metric. A valid normalized answer can still violate the requested bare-letter format.
+
+Use `--answer-policy strict_abc_v1` with `score`, `run`, `run-openai`, `run-gemini` or `compare` to reproduce the original bare-letter policy. The generation prompt protocol is unchanged; `scoring_policy` separately versions answer interpretation. Reports and summary tables identify the policy and scorer source hashes. Paired comparisons rescore both languages using one selected policy. Preserve original run directories and write revised reports to a new directory.
+
+The September pilot correction rescored saved responses only. It did not alter prompts, model outputs, datasets or output-token limits. A parser cannot recover a missing answer from a truncated explanation.
 
 Likelihood records use `{"id": "...", "scores": [...]}`. These are **mean scored-token log probabilities**, not probabilities or summed sentence likelihoods. BBQ requires nine values ordered by cyclic display order `(0,1,2)`, `(1,2,0)`, `(2,0,1)`, then A/B/C within each order. WinoBias requires A/B scores; StereoSet requires stereotype/anti-stereotype/unrelated scores. All values must be finite. Tied QA candidates split selection mass; StereoSet preserves the reference strict-greater-than comparisons and separately reports ties.
 
@@ -128,7 +141,7 @@ Intervals are **exploratory percentile intervals**, not simultaneous-coverage gu
 
 ## Validation and attribution
 
-Run `pytest tests/fair_uk`. A [GitHub Actions template](fair-uk-ci.yml) is included; CI is not enabled because the publishing credential lacks GitHub workflow permission. An authorized maintainer can install it as `.github/workflows/fair-uk-tests.yml`. Regression tests cover strict parsing, polarity, answer-order mapping, ties, unsupported groups, zero denominators, hidden intersectional disparities, source-case weighting, clustered extrema and token boundaries.
+Run `pytest tests/fair_uk`. A [GitHub Actions template](fair-uk-ci.yml) is included; CI is not enabled because the publishing credential lacks GitHub workflow permission. An authorized maintainer can install it as `.github/workflows/fair-uk-tests.yml`. Regression tests cover both parser versions, conflicting answers, format diagnostics, offline rescoring, polarity, answer-order mapping, ties, unsupported groups, zero denominators, hidden intersectional disparities, source-case weighting, clustered extrema and token boundaries.
 
 During implementation, all eight registered configurations passed checksum and structure checks. Native scoring was compared with the project reference evaluators on 100 BBQ rows, all 949 StereoSet items and 12 WinoBias Natural rows using constructed scores. A tiny random local causal model exercised generation and all four likelihood adapters. Those are software checks, not meaningful model fairness results. A substantive model case study and human benchmark validation remain future work.
 

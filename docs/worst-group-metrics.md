@@ -215,3 +215,7 @@ Bootstrap draws share one source-case weight across both languages and every dem
 
 The implementation should expose the adopted min/max method with attribution.
 Any research claim concerns its validated application to these bias tasks, including bilingual WarBias, rather than invention of the min/max ratio itself.
+
+## Answer parsing and format diagnostics
+
+WarBias answer scoring is versioned separately from the generation prompt. The default `abc_option_text_v2` maps harmless letter punctuation and exact option text to a choice; `strict_abc_v1` retains the original bare-letter rule. Both use the same semantic group metrics. `format_violation` reports failure to return a bare letter even when the selected answer is unambiguous; treat it as a format diagnostic, not stereotype harm. Never pool different answer policies without labeling them. Revised scores must retain raw predictions and the original generation provenance.

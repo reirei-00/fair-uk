@@ -58,6 +58,61 @@ def test_registered_checksum_and_complete_cluster_limits(tmp_path, monkeypatch):
         load("warbias_uk", path)
 
 
+def test_offline_rescore_versions_preserve_predictions(tmp_path, monkeypatch):
+    from lm_eval.fair_uk.answers import NORMALIZED, STRICT
+
+    source = tmp_path / "fixture.jsonl"
+    monkeypatch.setitem(REGISTRY, "warbias_uk", qa_fixture(source))
+    rows = load("warbias_uk", source)
+    predictions = tmp_path / "predictions.jsonl"
+    predictions.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "id": row["id"],
+                    "response": "ABC"[row["gold"]] + ". " + row["choices"][row["gold"]],
+                }
+            )
+            + "\n"
+            for row in rows
+        )
+    )
+    before = predictions.read_bytes()
+    reports = []
+    for policy in (STRICT, NORMALIZED):
+        output = tmp_path / policy
+        main(
+            [
+                "score",
+                "--task",
+                "warbias_uk",
+                "--input",
+                str(source),
+                "--predictions",
+                str(predictions),
+                "--output",
+                str(output),
+                "--answer-policy",
+                policy,
+                "--bootstrap",
+                "0",
+            ]
+        )
+        report = json.loads((output / "report.json").read_text())
+        expected = 0 if policy == STRICT else 1
+        assert report["scoring_policy"] == policy
+        assert all(
+            r["accuracy"] == expected for r in report["native"] if "condition" in r
+        )
+        assert report["answer_diagnostics"]["format_violation_rate"] == 1
+        assert report["scorer_code_identity"]
+        reports.append(str(output / "report.json"))
+    assert predictions.read_bytes() == before
+    main(["summarize", "--reports", *reports, "--output", str(tmp_path / "summary")])
+    summary = (tmp_path / "summary/summary.md").read_text()
+    assert STRICT in summary and NORMALIZED in summary
+
+
 def test_model_fingerprints_and_secret_redaction(tmp_path):
     with pytest.raises(ValueError, match="Pin a remote model"):
         model_identity("pretrained=organization/model")

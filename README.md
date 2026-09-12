@@ -40,7 +40,7 @@ Each task has a pinned HF revision, file checksum and its own scoring protocol. 
 
 ## Metrics and reports
 
-- **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable.
+- **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable. WarBias separates answer correctness from format compliance.
 - **Worst-group performance**, group gaps and min/max rate ratios, with group identities, case counts and exploratory source-case bootstrap intervals.
 - **Paired UK–EN WarBias comparisons** that keep translations and demographic variants of each case together.
 - **Reproducible outputs:** raw predictions, model/data/code fingerprints, Markdown reports, JSON results and CSV tables. Completed predictions can be resumed or rescored.

@@ -1,6 +1,6 @@
 # OpenAI WarBias pilot
 
-The OpenAI runner evaluates WarBias through Chat Completions with a dated model snapshot. It uses the unchanged WarBias prompt as one user message, no system message, temperature 0, a requested seed, and at most 16 output tokens. The strict A/B/C parser retains refusals, explanations and malformed responses as invalid answers. API failures interrupt the run and preserve completed responses; they are not scored as model answers.
+The OpenAI runner evaluates WarBias through Chat Completions with a dated model snapshot. It uses the unchanged WarBias prompt as one user message, no system message, temperature 0, a requested seed, and at most 16 output tokens. The versioned answer parser retains refusals, explanations and ambiguous responses as invalid answers. API failures interrupt the run and preserve completed responses; they are not scored as model answers.
 
 **Status:** the runner has offline tests using a mocked OpenAI SDK transport. A live pilot requires an accessible, funded OpenAI API key. No live API validation or pilot results are claimed yet.
 
@@ -51,3 +51,7 @@ A refusal with no text is preserved in the raw response and scored as an empty i
 Use the standard [paired language comparison](fair-uk.md#paired-warbias-uken-comparisons) and [experiment table](fair-uk.md#experiment-tables) commands on these run directories. The comparison checks the API metadata and scores raw responses again. Hosted model weights cannot be independently hashed, and a fixed snapshot, seed and temperature do not guarantee identical repeated outputs. Report the chat transport explicitly when comparing with open-weight raw-prompt runs.
 
 Supported snapshots and prices: [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1), [GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini). Request fields follow the [Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+
+## Versioned answer scoring
+
+New evaluations use `abc_option_text_v2`, accepting unambiguous letters, harmless letter punctuation and exact option text while retaining strict format diagnostics. Use `--answer-policy strict_abc_v1` to reproduce the original parser. The prompt and generation settings are unchanged. See the [answer parsing rules](fair-uk.md#outputs-and-rescoring).

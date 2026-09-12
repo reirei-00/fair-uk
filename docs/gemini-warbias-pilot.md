@@ -32,7 +32,7 @@ Source cases determine the effective sample size. Variants and translations are 
 
 ## Scoring and provenance
 
-The strict parser accepts only A/B/C after trimming and uppercasing. Explanations, refusals and empty responses are invalid, rather than unknown answers. Provider prompt blocks remain visible in the raw response. HTTP failures are run failures, not model predictions. Thought-marked response parts are retained in the raw API response but excluded from the answer being scored.
+The default `abc_option_text_v2` parser accepts unambiguous letters, harmless letter punctuation and exact option text; strict format compliance remains a separate diagnostic. Explanations, refusals and empty responses remain invalid, rather than unknown answers. Use `--answer-policy strict_abc_v1` to reproduce the original pilot scoring. See the [answer parsing rules](fair-uk.md#outputs-and-rescoring). Provider prompt blocks remain visible in the raw response. HTTP failures are run failures, not model predictions. Thought-marked response parts are retained in the raw API response but excluded from the answer being scored.
 
 Outputs include the usual Fair-UK reports plus exact requests, raw responses, timestamps, returned `modelVersion`, finish reasons and token usage. `MAX_TOKENS`, prompt blocks and any thought-token usage are explicit diagnostics in `report.json`. Minimal thinking does not guarantee that thinking is disabled; truncations must be considered when interpreting the pilot.
 
