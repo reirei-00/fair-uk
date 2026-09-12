@@ -31,8 +31,10 @@ def table(headers, rows):
 def model_label(report):
     identity = report["provenance"].get("model_identity")
     if isinstance(identity, dict):
-        return identity.get("repository") or identity.get("parameters", {}).get(
-            "pretrained", "local checkpoint"
+        return (
+            identity.get("repository")
+            or identity.get("model_snapshot")
+            or identity.get("parameters", {}).get("pretrained", "local checkpoint")
         )
     return "external predictions (model unverified)"
 

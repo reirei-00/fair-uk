@@ -263,3 +263,109 @@ def test_real_harness_sentence_likelihood(tmp_path):
         logits = model.model(ids).logits[0, :-1].float().log_softmax(-1)
     expected = (logits[0, 2] + logits[1, 2]).item() / 2
     assert result["scores"][0] == pytest.approx(expected, abs=1e-6)
+
+
+def test_openai_sdk_mock_transport_cli_and_paired_report(tmp_path, monkeypatch):
+    openai = pytest.importorskip("openai")
+    httpx = pytest.importorskip("httpx")
+    from lm_eval.fair_uk.reporting import model_label
+
+    snapshot = "gpt-4.1-mini-2025-04-14"
+    calls = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        assert str(request.url) == "https://api.openai.com/v1/chat/completions"
+        return httpx.Response(
+            200,
+            json={
+                "id": "chat-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": snapshot,
+                "system_fingerprint": "fp-test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": "C",
+                            "refusal": None,
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 1,
+                    "total_tokens": 11,
+                },
+            },
+        )
+
+    client = openai.OpenAI(
+        api_key="test-fixture",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "test-fixture")
+    monkeypatch.setattr(openai, "OpenAI", lambda **_: client)
+    source = tmp_path / "uk.jsonl"
+    monkeypatch.setitem(REGISTRY, "warbias_uk", qa_fixture(source))
+    source_en = tmp_path / "en.jsonl"
+    source_en.write_text(
+        source.read_text().replace('"language": "uk"', '"language": "en"')
+    )
+    monkeypatch.setitem(
+        REGISTRY,
+        "warbias_en",
+        {
+            **REGISTRY["warbias_uk"],
+            "language": "en",
+            "sha256": hashlib.sha256(source_en.read_bytes()).hexdigest(),
+        },
+    )
+    for language, path in (("uk", source), ("en", source_en)):
+        args = [
+            "run-openai",
+            "--task",
+            f"warbias_{language}",
+            "--snapshot",
+            snapshot,
+            "--input",
+            str(path),
+            "--output",
+            str(tmp_path / language),
+            "--bootstrap",
+            "10",
+        ]
+        main([*args, "--dry-run"])
+        if language == "uk":
+            assert calls == []
+        main(args)
+        main(args)  # Complete resume is entirely local.
+    assert len(calls) == 24
+    report = json.loads((tmp_path / "uk/report.json").read_text())
+    assert model_label(report) == snapshot
+    assert report["api_usage"]["recorded_responses"] == 12
+    assert "test-fixture" not in (tmp_path / "uk/report.json").read_text()
+    main(
+        [
+            "compare",
+            "--uk-run",
+            str(tmp_path / "uk"),
+            "--en-run",
+            str(tmp_path / "en"),
+            "--uk-input",
+            str(source),
+            "--en-input",
+            str(source_en),
+            "--bootstrap",
+            "100",
+            "--output",
+            str(tmp_path / "paired"),
+        ]
+    )
+    paired = json.loads((tmp_path / "paired/comparison.json").read_text())
+    assert paired["choice_disagreement_rate"] == 0
+    assert paired["source_cases"] == 2

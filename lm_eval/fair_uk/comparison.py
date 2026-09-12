@@ -26,6 +26,7 @@ def load_run(directory, input_path=None):
     if not isinstance(identity, dict) or not (
         identity.get("local_files_sha256")
         or (identity.get("repository") and identity.get("revision"))
+        or (identity.get("provider") == "openai" and identity.get("model_snapshot"))
     ):
         raise ValueError("Comparison requires a fingerprinted model run")
     full = load(task, input_path)
@@ -40,6 +41,18 @@ def load_run(directory, input_path=None):
     predictions = [
         json.loads(line) for line in prediction_path.read_text().splitlines()
     ]
+    if identity.get("provider") == "openai":
+        from lm_eval.fair_uk.openai_runner import (
+            identity as openai_identity,
+            validate_prediction,
+        )
+
+        if identity != openai_identity(identity["model_snapshot"], manifest["seed"]):
+            raise ValueError("OpenAI run identity differs from the supported settings")
+        indexed = {r["id"]: r for r in rows}
+        for prediction in predictions:
+            if prediction["id"] in indexed:
+                validate_prediction(indexed[prediction["id"]], prediction, identity)
     scored = score_all(rows, predictions)
     provenance = {
         "run": manifest,

@@ -29,7 +29,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="List pinned benchmark tasks")
-    for command in ("validate", "run", "score"):
+    for command in ("validate", "run", "score", "run-openai"):
         sub = commands.add_parser(command)
         sub.add_argument("--task", choices=sorted(REGISTRY), required=True)
         sub.add_argument(
@@ -47,6 +47,17 @@ def main(argv=None):
             sub.add_argument("--model-args", required=True)
             sub.add_argument("--batch-size", default="auto")
             sub.add_argument("--chunk-size", type=int, default=32)
+        if command == "run-openai":
+            from lm_eval.fair_uk.openai_runner import SNAPSHOTS
+
+            sub.add_argument("--snapshot", choices=sorted(SNAPSHOTS), required=True)
+            sub.add_argument("--concurrency", type=int, default=4)
+            sub.add_argument("--max-estimated-usd", type=float, default=2.0)
+            sub.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="Show a request/cost estimate without calling OpenAI",
+            )
         if command == "score":
             sub.add_argument("--predictions", type=Path, required=True)
     compare = commands.add_parser("compare", help="Compare paired UK/EN WarBias runs")
@@ -103,6 +114,14 @@ def main(argv=None):
         return
     if args.bootstrap < 0:
         parser.error("--bootstrap cannot be negative")
+    if args.command == "run-openai" and args.dry_run:
+        from lm_eval.fair_uk.openai_runner import estimate, identity, request_payload
+
+        model = identity(args.snapshot, args.seed)
+        for row in rows:
+            request_payload(row, model)
+        print(json.dumps(estimate(rows, args.snapshot), indent=2))
+        return
     args.output.mkdir(parents=True, exist_ok=True)
     run = {
         "version": VERSION,
@@ -154,6 +173,18 @@ def main(argv=None):
         predictions = run_predictions(
             backend, rows, args.output / "predictions.jsonl", args.chunk_size
         )
+    elif args.command == "run-openai":
+        from lm_eval.fair_uk.openai_runner import run as run_openai
+
+        predictions, run = run_openai(
+            rows,
+            run,
+            args.snapshot,
+            args.seed,
+            args.output,
+            args.concurrency,
+            args.max_estimated_usd,
+        )
     else:
         predictions = [
             json.loads(line) for line in args.predictions.read_text().splitlines()
@@ -167,6 +198,10 @@ def main(argv=None):
     scored = score_all(rows, predictions)
     report = make_report(scored, registry_rows, args.bootstrap, args.seed)
     report["provenance"] = run
+    if args.command == "run-openai":
+        from lm_eval.fair_uk.openai_runner import usage_summary
+
+        report["api_usage"] = usage_summary(predictions, args.snapshot)
     report.update(tool="Fair-UK", version=VERSION, report_schema_version=1)
     write_json(args.output / "report.json", report)
     (args.output / "records.jsonl").write_text(
