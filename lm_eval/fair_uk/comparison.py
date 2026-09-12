@@ -26,7 +26,10 @@ def load_run(directory, input_path=None):
     if not isinstance(identity, dict) or not (
         identity.get("local_files_sha256")
         or (identity.get("repository") and identity.get("revision"))
-        or (identity.get("provider") == "openai" and identity.get("model_snapshot"))
+        or (
+            identity.get("provider") in ("openai", "google")
+            and identity.get("model_snapshot")
+        )
     ):
         raise ValueError("Comparison requires a fingerprinted model run")
     full = load(task, input_path)
@@ -49,6 +52,18 @@ def load_run(directory, input_path=None):
 
         if identity != openai_identity(identity["model_snapshot"], manifest["seed"]):
             raise ValueError("OpenAI run identity differs from the supported settings")
+        indexed = {r["id"]: r for r in rows}
+        for prediction in predictions:
+            if prediction["id"] in indexed:
+                validate_prediction(indexed[prediction["id"]], prediction, identity)
+    if identity.get("provider") == "google":
+        from lm_eval.fair_uk.gemini_runner import (
+            identity as gemini_identity,
+            validate_prediction,
+        )
+
+        if identity != gemini_identity(identity["model_snapshot"], manifest["seed"]):
+            raise ValueError("Gemini identity differs from supported settings")
         indexed = {r["id"]: r for r in rows}
         for prediction in predictions:
             if prediction["id"] in indexed:

@@ -4,7 +4,7 @@ Fair-UK supports the WarBias study in Ukrainian and English, with BBQ-UK, Stereo
 
 This first implementation uses **pilot, human-unvalidated HF releases**. It reads evaluation datasets only; it does not create annotation assignments or modify annotation materials. It requires no unbiased reference model. Activation analysis is outside this release.
 
-For hosted OpenAI models, use the separate [OpenAI WarBias pilot guide](openai-warbias-pilot.md).
+For hosted models, use the [OpenAI pilot guide](openai-warbias-pilot.md) or [Gemini pilot guide](gemini-warbias-pilot.md).
 
 ## Install and run
 

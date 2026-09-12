@@ -51,6 +51,7 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 
 | I want to… | Guide |
 | --- | --- |
+| Evaluate Gemini models on WarBias | [Gemini pilot guide](docs/gemini-warbias-pilot.md) |
 | Evaluate OpenAI models on WarBias | [OpenAI pilot guide](docs/openai-warbias-pilot.md) |
 | Run a model or rescore predictions | [Installation and usage](docs/fair-uk.md) |
 | Compare Ukrainian and English results | [Paired language comparisons](docs/fair-uk.md#paired-warbias-uken-comparisons) |

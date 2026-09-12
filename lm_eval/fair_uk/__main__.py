@@ -29,7 +29,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="List pinned benchmark tasks")
-    for command in ("validate", "run", "score", "run-openai"):
+    for command in ("validate", "run", "score", "run-openai", "run-gemini"):
         sub = commands.add_parser(command)
         sub.add_argument("--task", choices=sorted(REGISTRY), required=True)
         sub.add_argument(
@@ -58,6 +58,13 @@ def main(argv=None):
                 action="store_true",
                 help="Show a request/cost estimate without calling OpenAI",
             )
+        if command == "run-gemini":
+            from lm_eval.fair_uk.gemini_runner import MODELS
+
+            sub.add_argument("--snapshot", choices=sorted(MODELS), required=True)
+            sub.add_argument("--concurrency", type=int, default=4)
+            sub.add_argument("--max-estimated-usd", type=float, default=2.0)
+            sub.add_argument("--dry-run", action="store_true")
         if command == "score":
             sub.add_argument("--predictions", type=Path, required=True)
     compare = commands.add_parser("compare", help="Compare paired UK/EN WarBias runs")
@@ -114,9 +121,15 @@ def main(argv=None):
         return
     if args.bootstrap < 0:
         parser.error("--bootstrap cannot be negative")
-    if args.command == "run-openai" and args.dry_run:
+    if args.command in ("run-openai", "run-gemini") and args.dry_run:
         from lm_eval.fair_uk.openai_runner import estimate, identity, request_payload
 
+        if args.command == "run-gemini":
+            from lm_eval.fair_uk.gemini_runner import (
+                estimate,
+                identity,
+                request_payload,
+            )
         model = identity(args.snapshot, args.seed)
         for row in rows:
             request_payload(row, model)
@@ -185,6 +198,18 @@ def main(argv=None):
             args.concurrency,
             args.max_estimated_usd,
         )
+    elif args.command == "run-gemini":
+        from lm_eval.fair_uk.gemini_runner import run as run_gemini
+
+        predictions, run = run_gemini(
+            rows,
+            run,
+            args.snapshot,
+            args.seed,
+            args.output,
+            args.concurrency,
+            args.max_estimated_usd,
+        )
     else:
         predictions = [
             json.loads(line) for line in args.predictions.read_text().splitlines()
@@ -203,6 +228,10 @@ def main(argv=None):
 
         report["api_usage"] = usage_summary(predictions, args.snapshot)
     report.update(tool="Fair-UK", version=VERSION, report_schema_version=1)
+    if args.command == "run-gemini":
+        from lm_eval.fair_uk.gemini_runner import usage_summary
+
+        report["api_usage"] = usage_summary(predictions, args.snapshot)
     write_json(args.output / "report.json", report)
     (args.output / "records.jsonl").write_text(
         "".join(
