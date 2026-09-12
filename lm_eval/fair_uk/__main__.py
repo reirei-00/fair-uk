@@ -6,54 +6,23 @@ import importlib.metadata
 import json
 from pathlib import Path
 
-from lm_eval.fairforget import VERSION
-from lm_eval.fairforget.data import REGISTRY, load, select_clusters
-from lm_eval.fairforget.metrics import make_report, score_all
+from lm_eval.fair_uk import VERSION
+from lm_eval.fair_uk.data import REGISTRY, load, select_clusters
+from lm_eval.fair_uk.metrics import make_report, score_all
+from lm_eval.fair_uk.provenance import code_identity
+from lm_eval.fair_uk.reporting import (
+    group_rows,
+    markdown,
+    paired_markdown,
+    summarize,
+    write_csv,
+)
 
 
 def write_json(path, value):
     path.write_text(
         json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     )
-
-
-def markdown(report):
-    lines = [
-        f"# {report['task']}",
-        "",
-        f"Protocol: `{report['protocol']}`. Dataset status: **pilot, human-unvalidated**.",
-        "",
-        f"{report['rows']} rows; {report['source_cases']} source cases. Partial run: {report['partial_run']}.",
-        "",
-        "Rates below use equal source-case weights within each group. Native metrics retain their documented aggregation.",
-        "",
-        "| Condition / stratum / control | Metric | Worst available group rate | Group(s) | Gap | Min/max ratio | Missing groups |",
-        "| --- | --- | ---: | --- | ---: | ---: | --- |",
-    ]
-
-    def fmt(value):
-        return "undefined" if value is None else f"{value:.4f}"
-
-    for comparison in report["comparisons"]:
-        scope = " / ".join(
-            str(comparison[k])
-            for k in ("condition", "stratum", "score_group")
-            if comparison[k] is not None
-        )
-        groups = ", ".join(comparison["worst_groups"]).replace("|", " / ")
-        lines.append(
-            f"| {scope} | {comparison['metric']} | {fmt(comparison['worst'])} | {groups} | {fmt(comparison['gap'])} | {fmt(comparison['minmax_ratio'])} | {', '.join(comparison['missing_groups']).replace('|', ' / ')} |"
-        )
-    lines.extend(
-        [
-            "",
-            "Full group numerators, denominators, source-case counts, native scores and bootstrap intervals are in `report.json`. Per-item scores are in `records.jsonl`.",
-            "",
-            "A parity ratio of one does not imply low harm. Zero/zero ratios are undefined. Intervals are exploratory source-case bootstrap intervals, not simultaneous coverage guarantees. Repeated profiles and translations are not independent source cases.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
 
 
 def main(argv=None):
@@ -80,7 +49,40 @@ def main(argv=None):
             sub.add_argument("--chunk-size", type=int, default=32)
         if command == "score":
             sub.add_argument("--predictions", type=Path, required=True)
+    compare = commands.add_parser("compare", help="Compare paired UK/EN WarBias runs")
+    compare.add_argument("--uk-run", type=Path, required=True)
+    compare.add_argument("--en-run", type=Path, required=True)
+    compare.add_argument("--uk-input", type=Path)
+    compare.add_argument("--en-input", type=Path)
+    compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--bootstrap", type=int, default=1000)
+    compare.add_argument("--seed", type=int, default=42)
+    summary = commands.add_parser(
+        "summarize", help="Build model-by-task experiment tables"
+    )
+    summary.add_argument("--reports", type=Path, nargs="+", required=True)
+    summary.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.command == "summarize":
+        summarize(args.reports, args.output)
+        print(f"Summary written to {args.output.resolve() / 'summary.md'}")
+        return
+    if args.command == "compare":
+        from lm_eval.fair_uk.comparison import compare_runs
+
+        report = compare_runs(
+            args.uk_run,
+            args.en_run,
+            args.uk_input,
+            args.en_input,
+            args.bootstrap,
+            args.seed,
+        )
+        args.output.mkdir(parents=True, exist_ok=True)
+        write_json(args.output / "comparison.json", report)
+        (args.output / "comparison.md").write_text(paired_markdown(report))
+        print(f"Comparison written to {args.output.resolve() / 'comparison.md'}")
+        return
     if args.command == "list":
         print(json.dumps(REGISTRY, indent=2))
         return
@@ -104,6 +106,7 @@ def main(argv=None):
     args.output.mkdir(parents=True, exist_ok=True)
     run = {
         "version": VERSION,
+        "code_identity": code_identity(),
         "dataset": REGISTRY[args.task],
         "task": args.task,
         "protocol": rows[0]["protocol"],
@@ -115,11 +118,12 @@ def main(argv=None):
     }
     if args.command == "run":
         from lm_eval.api.registry import get_model
-        from lm_eval.fairforget.provenance import model_identity
-        from lm_eval.fairforget.runner import run_predictions
+        from lm_eval.fair_uk.provenance import model_identity
+        from lm_eval.fair_uk.runner import run_predictions
 
         run.update(
             model_backend=args.model,
+            batch_size=str(args.batch_size),
             model_identity=model_identity(args.model_args),
             seed=args.seed,
             harness_version=importlib.metadata.version("lm_eval"),
@@ -163,6 +167,7 @@ def main(argv=None):
     scored = score_all(rows, predictions)
     report = make_report(scored, registry_rows, args.bootstrap, args.seed)
     report["provenance"] = run
+    report.update(tool="Fair-UK", version=VERSION, report_schema_version=1)
     write_json(args.output / "report.json", report)
     (args.output / "records.jsonl").write_text(
         "".join(
@@ -170,6 +175,7 @@ def main(argv=None):
             for row in scored
         )
     )
+    write_csv(args.output / "groups.csv", list(group_rows(report)))
     (args.output / "report.md").write_text(markdown(report))
     print(f"Report written to {args.output.resolve() / 'report.md'}")
 

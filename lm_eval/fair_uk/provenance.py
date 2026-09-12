@@ -52,3 +52,23 @@ def model_identity(model_args):
         arguments_sha256=hashlib.sha256(model_args.encode()).hexdigest(),
     )
     return identity
+
+
+def code_identity():
+    """Fingerprint toolkit source and the harness interfaces used by this runner."""
+    root = Path(__file__).parent.parent
+    paths = [*sorted((root / "fair_uk").glob("*.py")), root / "fair_uk/datasets.json"]
+    paths += [
+        root / name
+        for name in (
+            "api/model.py",
+            "api/registry.py",
+            "utils.py",
+            "models/huggingface.py",
+            "models/vllm_causallms.py",
+        )
+    ]
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in paths
+    }

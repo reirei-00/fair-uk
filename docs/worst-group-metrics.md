@@ -1,11 +1,11 @@
-# Worst-group comparisons for fairForget
+# Worst-group comparisons for Fair-UK
 
-Intersectional dataset release status: [WarBias PR #21](https://huggingface.co/datasets/FairForget/WarBias/discussions/21) is uploaded and verified; merge to `main` is pending. The new configurations described below become available on `main` after that merge.
+Intersectional dataset release status: [WarBias PR #21](https://huggingface.co/datasets/FairForget/WarBias/discussions/21) is merged and verified on HF `main`. The registry retains the same immutable content revision.
 
 Design adaptation updated 2026-09-12. The first implementation now provides
 rate comparisons, explicit group coverage and exploratory source-case bootstrap
 intervals across WarBias QA, BBQ-UK, StereoSet-UK and WinoBias-UK.
-See [implemented scope and validation](fairforget.md). Native-score reference
+See [implemented scope and validation](fair-uk.md). Native-score reference
 checks and tiny-model smoke tests pass. Human validation, broader interval-coverage
 simulations and paired between-model inference remain outstanding; this document
 also describes those planned extensions.
@@ -37,7 +37,7 @@ For a fixed dataset version, language, protocol and evidence condition, let
 1. `minmax_ratio = min_g(r_g) / max_g(r_g)` when the denominator is positive.
    One means equal measured rates. Smaller values mean greater relative
    disparity; this is not an absolute quality or harm score.
-2. `group_gap = max_g(r_g) - min_g(r_g)`. For rates, show percentage points.
+2. `group_gap = max_g(r_g) - min_g(r_g)`. The JSON/CSV rate gaps use [0,1] units; multiply by 100 to display percentage points.
 3. Absolute worst-group performance: `max_g(r_g)` for an undesirable event,
    or `min_g(r_g)` for a desirable outcome such as correct answers.
 
@@ -181,6 +181,12 @@ Prespecify multiplicity handling across reported conditions/group families.
 Keep statistical intervals distinct from uncertainty due to translation quality,
 construct validity and benchmark representativeness.
 
+## Paired language inference
+
+The `compare` command compares matching WarBias UK and EN runs after validating their model identity, settings, source IDs and semantic metadata. For each condition and group it reports `rate_EN - rate_UK`. It also reports `worst_EN - worst_UK`, where the worst group can differ between languages. All rates use equal source-case weights within each group.
+
+Bootstrap draws share one source-case weight across both languages and every demographic profile, stratified by status. Recomputing each language's extrema within every draw preserves group selection uncertainty. There is no min/max ratio of signed language differences. Intervals remain exploratory and describe these matched benchmark cases; they do not establish a causal language effect or generalization to unseen demographic groups. Paired between-model inference and confirmatory coverage validation remain future work.
+
 ## Required metric stress tests
 
 1. Hidden intersections: four equal-sized gender-by-status cells with error
@@ -208,5 +214,4 @@ construct validity and benchmark representativeness.
 5. Run reviewed datasets and freeze a release with reproducible manifests.
 
 The implementation should expose the adopted min/max method with attribution.
-Any research claim is about its validated application to these Ukrainian bias
-tasks, not invention of the min/max ratio itself.
+Any research claim concerns its validated application to these bias tasks, including bilingual WarBias, rather than invention of the min/max ratio itself.

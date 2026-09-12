@@ -39,19 +39,19 @@ include = ["lm_eval*"]
 
 # required to include yaml files in pip installation
 [tool.setuptools.package-data]
-lm_eval = ["**/*.yaml", "tasks/**/*", "fairforget/*.json"]
+lm_eval = ["**/*.yaml", "tasks/**/*", "fair_uk/*.json"]
 
 [project.scripts]
 lm-eval = "lm_eval.__main__:cli_evaluate"
 lm_eval = "lm_eval.__main__:cli_evaluate"
-fairforget-eval = "lm_eval.fairforget.__main__:main"
+fair-uk-eval = "lm_eval.fair_uk.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/EleutherAI/lm-evaluation-harness"
 Repository = "https://github.com/EleutherAI/lm-evaluation-harness"
 
 [project.optional-dependencies]
-fairforget = ["lm_eval[hf]", "transformers>=4.46.3,<5"]
+fair-uk = ["lm_eval[hf]", "transformers>=4.46.3,<5"]
 # Model backend dependencies
 api = ["requests", "aiohttp", "tenacity", "tqdm", "tiktoken"]
 archiver = ["jsonlines", "zstandard"]

@@ -1,7 +1,7 @@
 import pytest
 
-from lm_eval.fairforget.data import adapt, prompts
-from lm_eval.fairforget.metrics import (
+from lm_eval.fair_uk.data import adapt, prompts
+from lm_eval.fair_uk.metrics import (
     extremes,
     native_summaries,
     rate_report,
@@ -188,3 +188,21 @@ def test_invalid_rate_inputs_are_rejected(value):
             ["a"],
             0,
         )
+
+
+def test_single_group_is_not_a_parity_comparison():
+    result = rate_report(
+        [
+            {"group": "only", "cluster": str(i), "stratum": "s", "rate": 0.8}
+            for i in range(3)
+        ],
+        "rate",
+        "harm",
+        ["only"],
+        100,
+    )
+    assert result["worst"] == pytest.approx(0.8)
+    assert result["gap"] is None and result["minmax_ratio"] is None
+    assert result["comparison_status"] == "insufficient_groups"
+    assert result["ci95"]["gap"] is None
+    assert result["ci95"]["minmax_ratio"] is None

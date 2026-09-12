@@ -5,10 +5,10 @@ import json
 
 import pytest
 
-from lm_eval.fairforget.__main__ import main
-from lm_eval.fairforget.data import REGISTRY, adapt, load, select_clusters
-from lm_eval.fairforget.provenance import model_identity
-from lm_eval.fairforget.runner import predict
+from lm_eval.fair_uk.__main__ import main
+from lm_eval.fair_uk.data import REGISTRY, adapt, load, select_clusters
+from lm_eval.fair_uk.provenance import model_identity
+from lm_eval.fair_uk.runner import predict
 
 
 def qa_fixture(path):
@@ -153,6 +153,85 @@ def test_real_harness_generation_resume_and_offline_rescore(tmp_path, monkeypatc
     score_report = json.loads((rescored / "report.json").read_text())
     assert run_report["comparisons"] == score_report["comparisons"]
     assert run_report["source_cases"] == 2
+    source_en = tmp_path / "fixture_en.jsonl"
+    source_en.write_text(
+        source.read_text().replace('"language": "uk"', '"language": "en"')
+    )
+    monkeypatch.setitem(
+        REGISTRY,
+        "warbias_en",
+        {
+            **REGISTRY["warbias_uk"],
+            "language": "en",
+            "sha256": hashlib.sha256(source_en.read_bytes()).hexdigest(),
+        },
+    )
+    output_en = tmp_path / "run_en"
+    args_en = [
+        str(output_en)
+        if a == str(output)
+        else str(source_en)
+        if a == str(source)
+        else "warbias_en"
+        if a == "warbias_uk"
+        else a
+        for a in args
+    ]
+    main(args_en)
+    paired = tmp_path / "paired"
+    compare_args = [
+        "compare",
+        "--uk-run",
+        str(output),
+        "--en-run",
+        str(output_en),
+        "--uk-input",
+        str(source),
+        "--en-input",
+        str(source_en),
+        "--output",
+        str(paired),
+        "--bootstrap",
+        "100",
+    ]
+    main(compare_args)
+    result = json.loads((paired / "comparison.json").read_text())
+    assert result["paired_rows"] == 12 and result["source_cases"] == 2
+    assert result["choice_disagreement_rate"] == 0
+    assert all(c["worst_delta_ci95"] == [0, 0] for c in result["comparisons"])
+    summary = tmp_path / "summary"
+    main(
+        [
+            "summarize",
+            "--reports",
+            str(output / "report.json"),
+            str(output_en / "report.json"),
+            "--output",
+            str(summary),
+        ]
+    )
+    assert "warbias_uk" in (summary / "summary.md").read_text()
+    assert "warbias_en" in (summary / "coverage.csv").read_text()
+    assert (output / "groups.csv").exists()
+    with pytest.raises(ValueError, match="Duplicate experiment"):
+        main(
+            [
+                "summarize",
+                "--reports",
+                str(output / "report.json"),
+                str(output / "report.json"),
+                "--output",
+                str(summary),
+            ]
+        )
+    # Re-score raw predictions instead of trusting possibly stale computed records.
+    (output_en / "records.jsonl").write_text("invalid cached derived results")
+    main(compare_args)
+    run_en = json.loads((output_en / "run.json").read_text())
+    run_en["model_identity"]["local_files_sha256"]["model.safetensors"] = "different"
+    (output_en / "run.json").write_text(json.dumps(run_en))
+    with pytest.raises(ValueError, match="identical model_identity"):
+        main(compare_args)
     (model / "modified.txt").write_text("changed")
     with pytest.raises(ValueError, match="different run"):
         main(args)

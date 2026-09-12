@@ -6,7 +6,7 @@ from statistics import fmean
 
 import numpy as np
 
-from lm_eval.fairforget.data import family, prompts
+from lm_eval.fair_uk.data import family, prompts
 
 
 def score_item(row, prediction):
@@ -96,8 +96,8 @@ def extremes(rates, direction):
     worst = hi if direction == "harm" else lo
     return {
         "worst": worst,
-        "gap": hi - lo,
-        "minmax_ratio": lo / hi if hi > 0 else None,
+        "gap": hi - lo if len(rates) >= 2 else None,
+        "minmax_ratio": lo / hi if hi > 0 and len(rates) >= 2 else None,
         "worst_groups": sorted(g for g, value in rates.items() if value == worst),
     }
 
@@ -118,6 +118,7 @@ def rate_report(rows, metric, direction, registered_groups, bootstrap=1000, seed
         values = {key: fmean(v) for key, v in clusters.items()}
         groups[group] = {
             "rate": fmean(values.values()) if values else None,
+            "status": "available" if values else "no_eligible_items",
             "numerator": sum(r[metric] for r in subset),
             "denominator": len(subset),
             "source_cases": len(values),
@@ -140,6 +141,13 @@ def rate_report(rows, metric, direction, registered_groups, bootstrap=1000, seed
         "bootstrap_valid_replicates": 0,
     }
     result["coverage_complete"] = not result["missing_groups"]
+    result["comparison_status"] = (
+        "insufficient_groups"
+        if len(rates) < 2
+        else "all_rates_zero"
+        if max(rates.values()) == 0
+        else "available"
+    )
     keys = sorted({key for value in groups.values() for key in value["_clusters"]})
     if bootstrap > 0 and keys and all(v["source_cases"] >= 2 for v in groups.values()):
         rng = np.random.default_rng(seed)
@@ -173,12 +181,19 @@ def rate_report(rows, metric, direction, registered_groups, bootstrap=1000, seed
         result["bootstrap_valid_replicates"] = int(valid.sum())
         if matrix.size:
             lo, hi = matrix.min(axis=0), matrix.max(axis=0)
-            ratio = np.divide(lo, hi, out=np.full(len(hi), np.nan), where=hi > 0)
+            ratio = np.divide(
+                lo,
+                hi,
+                out=np.full(len(hi), np.nan),
+                where=(hi > 0) & (len(groups) >= 2),
+            )
             result["ci95"] = {
                 "worst": np.quantile(
                     hi if direction == "harm" else lo, [0.025, 0.975]
                 ).tolist(),
-                "gap": np.quantile(hi - lo, [0.025, 0.975]).tolist(),
+                "gap": np.quantile(hi - lo, [0.025, 0.975]).tolist()
+                if len(groups) >= 2
+                else None,
                 "minmax_ratio": np.quantile(
                     ratio[np.isfinite(ratio)], [0.025, 0.975]
                 ).tolist()

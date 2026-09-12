@@ -1,6 +1,6 @@
 import pytest
 
-from lm_eval.fairforget.runner import encode_request
+from lm_eval.fair_uk.runner import encode_request
 
 
 class Tokenizer:

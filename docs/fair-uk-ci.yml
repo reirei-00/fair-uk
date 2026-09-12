@@ -1,19 +1,19 @@
-name: FairForget evaluation tests
+name: Fair-UK evaluation tests
 
 on:
   pull_request:
     paths:
-      - 'lm_eval/fairforget/**'
-      - 'tests/fairforget/**'
+      - 'lm_eval/fair_uk/**'
+      - 'tests/fair_uk/**'
       - 'pyproject.toml'
-      - '.github/workflows/fairforget-tests.yml'
+      - '.github/workflows/fair-uk-tests.yml'
   push:
     branches: [main, feat/fairness-evaluation]
     paths:
-      - 'lm_eval/fairforget/**'
-      - 'tests/fairforget/**'
+      - 'lm_eval/fair_uk/**'
+      - 'tests/fair_uk/**'
       - 'pyproject.toml'
-      - '.github/workflows/fairforget-tests.yml'
+      - '.github/workflows/fair-uk-tests.yml'
 
 permissions:
   contents: read
@@ -28,9 +28,9 @@ jobs:
           python-version: '3.10'
           cache: pip
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install -e '.[fairforget]' 'transformers==4.46.3' pytest ruff
-      - run: ruff check lm_eval/fairforget tests/fairforget
-      - run: pytest tests/fairforget -q
+      - run: pip install -e '.[fair-uk]' 'transformers==4.46.3' pytest ruff
+      - run: ruff check lm_eval/fair_uk tests/fair_uk
+      - run: pytest tests/fair_uk -q
         env:
           HF_HUB_OFFLINE: '1'
           TOKENIZERS_PARALLELISM: 'false'

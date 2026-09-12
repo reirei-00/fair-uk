@@ -1,8 +1,8 @@
-# FairForget Evaluation
+# Fair-UK Evaluation
 
-This fork adds a fairness evaluation runner for WarBias (Ukrainian and English), BBQ-UK, StereoSet-UK Eval, and WinoBias-UK Controlled and Natural. It includes pinned HF data, native scoring protocols, worst-group comparisons, source-case bootstrap reports and offline rescoring. No annotation assignments are created.
+**WarBias is the main research contribution; Fair-UK is its complementary evaluation toolkit.** The core study evaluates WarBias in Ukrainian and English. BBQ-UK, StereoSet-UK Eval and WinoBias-UK Controlled and Natural provide complementary measurements. This fork adds pinned HF data, native scoring, worst-group reports, paired UK–EN source-case comparisons, experiment tables and offline rescoring. It is independent of unlearning experiments.
 
-**Start here: [FairForget installation and usage](docs/fairforget.md).** The datasets remain pilot, human-unvalidated releases. The new command is `fairforget-eval`; the upstream `lm-eval` command and model backends are preserved.
+**Start here: [Fair-UK installation and usage](docs/fair-uk.md).** The datasets remain pilot, human-unvalidated releases. The new command is `fair-uk-eval`; the upstream `lm-eval` command and model backends are preserved.
 
 ---
 

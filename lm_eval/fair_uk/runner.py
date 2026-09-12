@@ -4,7 +4,7 @@ import json
 import math
 
 from lm_eval.api.instance import Instance
-from lm_eval.fairforget.data import family, prompts
+from lm_eval.fair_uk.data import family, prompts
 
 
 def encode_request(backend, request, sentence=False):
@@ -136,7 +136,7 @@ def run_predictions(backend, rows, path, chunk_size=32):
     ids = [row.get("id") for row in completed]
     if len(set(ids)) != len(ids) or not set(ids) <= {r["id"] for r in rows}:
         raise ValueError("Checkpoint contains duplicate or unexpected IDs")
-    from lm_eval.fairforget.metrics import score_item
+    from lm_eval.fair_uk.metrics import score_item
 
     index = {row["id"]: row for row in rows}
     for prediction in completed:
