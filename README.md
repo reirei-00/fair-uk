@@ -1,3 +1,11 @@
+# FairForget Evaluation
+
+This fork adds a fairness evaluation runner for WarBias (Ukrainian and English), BBQ-UK, StereoSet-UK Eval, and WinoBias-UK Controlled and Natural. It includes pinned HF data, native scoring protocols, worst-group comparisons, source-case bootstrap reports and offline rescoring. No annotation assignments are created.
+
+**Start here: [FairForget installation and usage](docs/fairforget.md).** The datasets remain pilot, human-unvalidated releases. The new command is `fairforget-eval`; the upstream `lm-eval` command and model backends are preserved.
+
+---
+
 # Language Model Evaluation Harness
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10256836.svg)](https://doi.org/10.5281/zenodo.10256836)
