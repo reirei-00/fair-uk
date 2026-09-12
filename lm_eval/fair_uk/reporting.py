@@ -31,8 +31,10 @@ def table(headers, rows):
 def model_label(report):
     identity = report["provenance"].get("model_identity")
     if isinstance(identity, dict):
-        return identity.get("repository") or identity.get("parameters", {}).get(
-            "pretrained", "local checkpoint"
+        return (
+            identity.get("repository")
+            or identity.get("model_snapshot")
+            or identity.get("parameters", {}).get("pretrained", "local checkpoint")
         )
     return "external predictions (model unverified)"
 
@@ -72,6 +74,13 @@ def markdown(report):
         table(["Native scope", "Metric", "Value", "Unit"], native_entries(report)),
         "",
     ]
+    if "scoring_policy" in report:
+        diagnostics = report["answer_diagnostics"]
+        lines[4:4] = [
+            f"Answer scoring: `{report['scoring_policy']}`. Strict-format accuracy: {fmt(diagnostics['strict_accuracy'])}; format-violation rate: {fmt(diagnostics['format_violation_rate'])}.",
+            "Formatting diagnostics are separate from semantic invalid answers and fairness outcomes.",
+            "",
+        ]
     rows = []
     for c in report["comparisons"]:
         scope = " / ".join(
@@ -180,6 +189,8 @@ def paired_markdown(report):
             "",
             f"**EN minus UK**, in rate units. {report['paired_rows']} matched items; {report['source_cases']} source cases. Partial run: {report['partial_run']}.",
             "",
+            f"Answer scoring: `{report.get('scoring_policy', 'legacy / unspecified')}`. Both languages are rescored under this policy.",
+            "",
             "Positive deltas mean a higher English rate; improvement depends on the metric. Worst groups can differ between languages. Their extrema are recomputed in each paired bootstrap replicate.",
             "",
             table(
@@ -222,7 +233,15 @@ def summarize(paths, output):
     for path in paths:
         report = json.loads(path.read_text())
         provenance = report["provenance"]
-        key = json.dumps(provenance, sort_keys=True)
+        scoring_policy = report.get("scoring_policy", "legacy / unspecified")
+        key = json.dumps(
+            {
+                "generation": provenance,
+                "scoring_policy": scoring_policy,
+                "scorer_code_identity": report.get("scorer_code_identity"),
+            },
+            sort_keys=True,
+        )
         if key in seen:
             raise ValueError("Duplicate experiment identity; select one report per run")
         seen.add(key)
@@ -239,6 +258,7 @@ def summarize(paths, output):
             "task": report["task"],
             "language": report["language"],
             "protocol": report["protocol"],
+            "scoring_policy": scoring_policy,
             "dataset_revision": provenance["dataset"]["revision"],
             "partial_run": report["partial_run"],
         }
@@ -303,13 +323,23 @@ def summarize(paths, output):
                 "WarBias UK/EN form the core study; the other benchmarks provide complementary measurements. Each task, language, model and protocol is reported separately. No cross-benchmark composite is calculated.",
                 "",
                 table(
-                    ["Model", "Run", "Task", "Language", "Rows", "Cases", "Partial"],
+                    [
+                        "Model",
+                        "Run",
+                        "Task",
+                        "Language",
+                        "Answer policy",
+                        "Rows",
+                        "Cases",
+                        "Partial",
+                    ],
                     [
                         (
                             r["model"],
                             r["run_id"],
                             r["task"],
                             r["language"],
+                            r["scoring_policy"],
                             r["rows"],
                             r["source_cases"],
                             r["partial_run"],

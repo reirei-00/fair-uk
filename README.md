@@ -40,7 +40,7 @@ Each task has a pinned HF revision, file checksum and its own scoring protocol. 
 
 ## Metrics and reports
 
-- **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable.
+- **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable. WarBias separates answer correctness from format compliance.
 - **Worst-group performance**, group gaps and min/max rate ratios, with group identities, case counts and exploratory source-case bootstrap intervals.
 - **Paired UK–EN WarBias comparisons** that keep translations and demographic variants of each case together.
 - **Reproducible outputs:** raw predictions, model/data/code fingerprints, Markdown reports, JSON results and CSV tables. Completed predictions can be resumed or rescored.
@@ -51,6 +51,8 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 
 | I want to… | Guide |
 | --- | --- |
+| Evaluate Gemini models on WarBias | [Gemini pilot guide](docs/gemini-warbias-pilot.md) |
+| Evaluate OpenAI models on WarBias | [OpenAI pilot guide](docs/openai-warbias-pilot.md) |
 | Run a model or rescore predictions | [Installation and usage](docs/fair-uk.md) |
 | Compare Ukrainian and English results | [Paired language comparisons](docs/fair-uk.md#paired-warbias-uken-comparisons) |
 | Combine reports into model-by-task tables | [Experiment tables](docs/fair-uk.md#experiment-tables) |

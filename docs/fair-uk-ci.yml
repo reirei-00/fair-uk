@@ -28,7 +28,7 @@ jobs:
           python-version: '3.10'
           cache: pip
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install -e '.[fair-uk]' 'transformers==4.46.3' pytest ruff
+      - run: pip install -e '.[fair-uk,fair-uk-openai,fair-uk-gemini]' 'transformers==4.46.3' pytest ruff
       - run: ruff check lm_eval/fair_uk tests/fair_uk
       - run: pytest tests/fair_uk -q
         env:

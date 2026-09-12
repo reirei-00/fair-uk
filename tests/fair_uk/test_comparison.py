@@ -63,6 +63,7 @@ def test_alignment_rejects_different_cases_keys_and_tracks():
         ("cluster", "different"),
         ("gold", 1),
         ("task", "warbias_intersectional_en"),
+        ("scoring_policy", "different"),
     ):
         changed = copy.deepcopy(other)
         changed[key] = value

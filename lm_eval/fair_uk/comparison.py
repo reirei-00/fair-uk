@@ -8,12 +8,13 @@ from statistics import fmean
 import numpy as np
 
 from lm_eval.fair_uk import VERSION
+from lm_eval.fair_uk.answers import NORMALIZED
 from lm_eval.fair_uk.data import PROTOCOLS, REGISTRY, load, select_clusters
 from lm_eval.fair_uk.metrics import make_report, score_all
 from lm_eval.fair_uk.provenance import code_identity
 
 
-def load_run(directory, input_path=None):
+def load_run(directory, input_path=None, answer_policy=NORMALIZED):
     manifest = json.loads((directory / "run.json").read_text())
     task = manifest["task"]
     if not task.startswith("warbias_") or task not in REGISTRY:
@@ -26,6 +27,10 @@ def load_run(directory, input_path=None):
     if not isinstance(identity, dict) or not (
         identity.get("local_files_sha256")
         or (identity.get("repository") and identity.get("revision"))
+        or (
+            identity.get("provider") in ("openai", "google")
+            and identity.get("model_snapshot")
+        )
     ):
         raise ValueError("Comparison requires a fingerprinted model run")
     full = load(task, input_path)
@@ -40,7 +45,31 @@ def load_run(directory, input_path=None):
     predictions = [
         json.loads(line) for line in prediction_path.read_text().splitlines()
     ]
-    scored = score_all(rows, predictions)
+    if identity.get("provider") == "openai":
+        from lm_eval.fair_uk.openai_runner import (
+            identity as openai_identity,
+            validate_prediction,
+        )
+
+        if identity != openai_identity(identity["model_snapshot"], manifest["seed"]):
+            raise ValueError("OpenAI run identity differs from the supported settings")
+        indexed = {r["id"]: r for r in rows}
+        for prediction in predictions:
+            if prediction["id"] in indexed:
+                validate_prediction(indexed[prediction["id"]], prediction, identity)
+    if identity.get("provider") == "google":
+        from lm_eval.fair_uk.gemini_runner import (
+            identity as gemini_identity,
+            validate_prediction,
+        )
+
+        if identity != gemini_identity(identity["model_snapshot"], manifest["seed"]):
+            raise ValueError("Gemini identity differs from supported settings")
+        indexed = {r["id"]: r for r in rows}
+        for prediction in predictions:
+            if prediction["id"] in indexed:
+                validate_prediction(indexed[prediction["id"]], prediction, identity)
+    scored = score_all(rows, predictions, answer_policy)
     provenance = {
         "run": manifest,
         "predictions_sha256": hashlib.sha256(prediction_path.read_bytes()).hexdigest(),
@@ -71,6 +100,8 @@ def align(uk, en):
     )
     for key, row in left.items():
         other = right[key]
+        if row.get("scoring_policy") != other.get("scoring_policy"):
+            raise ValueError("UK and EN must use the same answer scoring policy")
         if row["language"] != "uk" or other["language"] != "en":
             raise ValueError("Expected UK followed by EN")
         if row["task"].removesuffix("_uk") != other["task"].removesuffix("_en"):
@@ -200,7 +231,8 @@ def compare_rows(uk, en, registry_uk, registry_en, bootstrap=1000, seed=42):
     return {
         "tool": "Fair-UK",
         "version": VERSION,
-        "report_schema_version": 1,
+        "report_schema_version": 2,
+        "scoring_policy": report["scoring_policy"],
         "kind": "paired_warbias_language_comparison",
         "scorer_code_identity": code_identity(),
         "tasks": [uk[0]["task"], en[0]["task"]],
@@ -223,9 +255,17 @@ def compare_rows(uk, en, registry_uk, registry_en, bootstrap=1000, seed=42):
     }
 
 
-def compare_runs(uk_dir, en_dir, uk_input=None, en_input=None, bootstrap=1000, seed=42):
-    uk, full_uk, provenance_uk = load_run(uk_dir, uk_input)
-    en, full_en, provenance_en = load_run(en_dir, en_input)
+def compare_runs(
+    uk_dir,
+    en_dir,
+    uk_input=None,
+    en_input=None,
+    bootstrap=1000,
+    seed=42,
+    answer_policy=NORMALIZED,
+):
+    uk, full_uk, provenance_uk = load_run(uk_dir, uk_input, answer_policy)
+    en, full_en, provenance_en = load_run(en_dir, en_input, answer_policy)
     a, b = provenance_uk["run"], provenance_en["run"]
     for key in (
         "model_identity",
