@@ -1,0 +1,74 @@
+{
+  "bbq_uk": {
+    "repo": "FairForget/BBQ-UK",
+    "revision": "4d19497de776cc5be55e9b3ad9481ed0836632b0",
+    "filename": "data/test.csv",
+    "sha256": "de97272d7b1368d8fc9d347d71a004a0781d9336d8670ede5c6ed0d80e819c0f",
+    "rows": 58492,
+    "language": "uk",
+    "human_validated": false
+  },
+  "stereoset_uk": {
+    "repo": "FairForget/StereoSet-UK-Eval",
+    "revision": "b408fe0283a5159d5815e790197d4b5571fb6ca0",
+    "filename": "data/validation.csv",
+    "sha256": "0fd16c79b88dd4d1384466b27b46e0b305aadf1a6086798da22c0e7c2f17d202",
+    "rows": 949,
+    "language": "uk",
+    "human_validated": false
+  },
+  "winobias_uk_natural": {
+    "repo": "FairForget/WinoBias-UK-Natural",
+    "revision": "1d17b7dbc99ecfa14a1cc99cd9f3aab9e1824786",
+    "filename": "data/validation.csv",
+    "sha256": "2e2a638adbecd9f3cf84e961b6c2e4720fa941d13637fda06e328e65f2deab27",
+    "rows": 1674,
+    "language": "uk",
+    "human_validated": false
+  },
+  "winobias_uk_controlled": {
+    "repo": "FairForget/WinoBias-UK-Controlled",
+    "revision": "7ca9f2338bdbc5cb2d197389bf00b2560d086db1",
+    "filename": "data/test.csv",
+    "sha256": "1f4eed3b2e0984eaf2615640bdba910f2a241c5556de86439bddfadf3794cf45",
+    "rows": 1580,
+    "language": "uk",
+    "human_validated": false
+  },
+  "warbias_uk": {
+    "repo": "FairForget/WarBias",
+    "revision": "48d804d6ffa4638a612bac834d99cacb460a6893",
+    "filename": "data/eval_uk/unassigned.jsonl",
+    "sha256": "c391f39287ac432df09d3c031ddbdba1037c27e1b94f2bef393c7a567fd0d293",
+    "rows": 240,
+    "language": "uk",
+    "human_validated": false
+  },
+  "warbias_intersectional_uk": {
+    "repo": "FairForget/WarBias",
+    "revision": "67239dbf57875d9763000f141fc6f70c86e436f2",
+    "filename": "data/eval_intersectional_uk/unassigned.jsonl",
+    "sha256": "69b8362c52ca8d938f6cb3e86eed928dcc505c6f3092706cb96dc702accac5dc",
+    "rows": 1320,
+    "language": "uk",
+    "human_validated": false
+  },
+  "warbias_en": {
+    "repo": "FairForget/WarBias",
+    "revision": "48d804d6ffa4638a612bac834d99cacb460a6893",
+    "filename": "data/eval_en/unassigned.jsonl",
+    "sha256": "1df421e0b5c0f7a72f71b217fe072fe294ae7a192e94e0b128584a620b19f41a",
+    "rows": 240,
+    "language": "en",
+    "human_validated": false
+  },
+  "warbias_intersectional_en": {
+    "repo": "FairForget/WarBias",
+    "revision": "67239dbf57875d9763000f141fc6f70c86e436f2",
+    "filename": "data/eval_intersectional_en/unassigned.jsonl",
+    "sha256": "9bd72fb7f8c48610266adb129f26987f8406e5c099190a2582740029a62d553a",
+    "rows": 1320,
+    "language": "en",
+    "human_validated": false
+  }
+}

@@ -1,3 +1,11 @@
+# Fair-UK Evaluation
+
+**WarBias is the main research contribution; Fair-UK is its complementary evaluation toolkit.** The core study evaluates WarBias in Ukrainian and English. BBQ-UK, StereoSet-UK Eval and WinoBias-UK Controlled and Natural provide complementary measurements. This fork adds pinned HF data, native scoring, worst-group reports, paired UK–EN source-case comparisons, experiment tables and offline rescoring. It is independent of unlearning experiments.
+
+**Start here: [Fair-UK installation and usage](docs/fair-uk.md).** The datasets remain pilot, human-unvalidated releases. The new command is `fair-uk-eval`; the upstream `lm-eval` command and model backends are preserved.
+
+---
+
 # Language Model Evaluation Harness
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10256836.svg)](https://doi.org/10.5281/zenodo.10256836)
