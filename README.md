@@ -53,7 +53,7 @@ Each task has a pinned HF revision, file checksum and its own scoring protocol. 
 
 - **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable. WarBias separates answer correctness from format compliance.
 - **Worst-group performance**, group gaps and min/max rate ratios, with group identities, case counts and exploratory source-case bootstrap intervals.
-- **Paired UK–EN WarBias comparisons** that keep translations and demographic variants of each case together.
+- **Paired UK–EN comparisons** for all benchmark families with matched counterparts, keeping translations and demographic variants of each case together.
 - **Reproducible outputs:** raw predictions, model/data/code fingerprints, Markdown reports, JSON results and CSV tables. Completed predictions can be resumed or rescored.
 
 Benchmarks and languages retain separate scores. A parity ratio of one means equal measured rates; it can still accompany poor performance. See the [metric definitions and limitations](docs/worst-group-metrics.md).
@@ -73,8 +73,6 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 | Combine reports into model-by-task tables | [Experiment tables](docs/fair-uk.md#experiment-tables) |
 | Understand group metrics and uncertainty | [Worst-group comparisons](docs/worst-group-metrics.md) |
 | Check validation and release limitations | [Pilot release notes](docs/fair-uk-release.md) |
-| See planned work | [Development roadmap](docs/fair-uk-roadmap.md) |
-| See what remains to finish the suite | [Completion checklist](docs/completion-checklist.md) |
 
 ## Built on EleutherAI's evaluation harness
 

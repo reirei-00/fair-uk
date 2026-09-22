@@ -69,12 +69,6 @@ Add the model arguments, output directory and `--execute` to run it. The suite a
 
 A text-only chat API cannot provide the candidate token scores required by the current BBQ, StereoSet and WinoBias protocols. Replacing those measurements with generated answers would be a separately specified benchmark protocol. The multi-task `suite` launcher supports checkpoint and generic hosted backends and rejects unsupported task/backend combinations before inference. See [hosted configuration](hosted-models.md).
 
-## Relationship to the Ukrainian LLM Leaderboard
-
-The related public project located during this review is [lang-uk/ukrainian-llm-leaderboard](https://github.com/lang-uk/ukrainian-llm-leaderboard). Its README describes Ukrainian capability tasks and execution through `lm_eval` with a custom task include path, plus a leaderboard over result files. Fair-UK independently extends the same upstream harness with bias-specific adapters, source-case grouping, worst-group measures and paired WarBias language reports. It has not imported that leaderboard's task suite or become a compatible leaderboard frontend.
-
-Use the leaderboard as a reference for packaging and reporting. Keep fairness metrics, generation settings and dataset versions explicit; a capability score is not a bias score.
-
 ## Generation limits and reproducibility
 
 New checkpoint and generic hosted runs default to 128 output tokens. Set `--max-output-tokens` for checkpoint models or `max_output_tokens` in hosted configuration. Generation settings belong to the run identity; existing 16-token pilots retain their original manifests and cannot be silently resumed under new settings. Legacy hosted commands remain unchanged for reproduction.

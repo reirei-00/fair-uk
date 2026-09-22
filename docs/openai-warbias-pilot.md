@@ -1,5 +1,7 @@
 # OpenAI WarBias pilot
 
+This guide documents the legacy pilot protocol. For new model configurations, use the [generic hosted runner](hosted-models.md).
+
 The OpenAI runner evaluates WarBias through Chat Completions with a dated model snapshot. It uses the unchanged WarBias prompt as one user message, no system message, temperature 0, a requested seed, and at most 16 output tokens. The versioned answer parser retains refusals, explanations and ambiguous responses as invalid answers. API failures interrupt the run and preserve completed responses; they are not scored as model answers.
 
 **Status:** the runner has offline tests using a mocked OpenAI SDK transport. A live pilot requires an accessible, funded OpenAI API key. No live API validation or pilot results are claimed yet.
@@ -27,16 +29,7 @@ fair-uk-eval run-openai \
 
 Remove `--dry-run` to execute. `--concurrency 4` controls simultaneous requests. `--max-estimated-usd 2` rejects a pending-request estimate above $2 before sending requests. The estimate uses UTF-8 byte counts plus a chat-envelope allowance and no cache discount; it is deliberately conservative and is not a billing guarantee. SDK retries are disabled. Failed or interrupted requests may incur costs that are absent from saved usage records.
 
-## Prepared pilot matrix
-
-| Track | Rows per model and language | Source cases per language |
-| --- | ---: | ---: |
-| WarBias base | 240 | 40: 20 per status |
-| WarBias intersectional subset | 330 | 10: 5 per status, all supported profiles |
-
-Run both Ukrainian and English for `gpt-4.1-2025-04-14` and `gpt-4.1-mini-2025-04-14`. This produces 2,280 responses. The preflight estimate for the pinned data is $3.31 across the eight runs, before any unrecorded failed requests, based on the official prices checked on 2026-09-12. This is a pilot selection of two non-reasoning baselines, not a comparison of the latest OpenAI models.
-
-Base and intersectional rows reuse source cases. Translations, demographic profiles and evidence variants are not independent cases. Five cases per intersectional cell give limited precision; uncertainty remains exploratory. Dataset text is human-unvalidated.
+Base and intersectional rows reuse source cases. Translations, demographic profiles and evidence variants are not independent cases. Small samples give limited precision; uncertainty remains exploratory. Dataset text is human-unvalidated.
 
 ## Outputs and comparisons
 
