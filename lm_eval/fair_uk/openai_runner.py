@@ -186,6 +186,8 @@ def run(
         raise ValueError("Checkpoint has duplicate or unexpected IDs")
     for prediction in completed:
         validate_prediction(by_id[prediction["id"]], prediction, model)
+    source_order = {row["id"]: index for index, row in enumerate(rows)}
+    completed.sort(key=lambda prediction: source_order[prediction["id"]])
     done = set(ids)
     pending = [row for row in rows if row["id"] not in done]
     if estimate(pending, snapshot)["cost_usd_upper_estimate"] > max_estimated_usd:
@@ -203,6 +205,10 @@ def run(
     run_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     )
+    # Older checkpoints used API completion order. Normalize even a fully
+    # completed resume so the saved records and report checksum use one order.
+    if ids != [prediction["id"] for prediction in completed]:
+        atomic_write(path, completed)
 
     def predict(row):
         payload = request_payload(row, model)
@@ -229,6 +235,9 @@ def run(
             for future in as_completed(futures):
                 try:
                     completed.append(future.result())
+                    completed.sort(
+                        key=lambda prediction: source_order[prediction["id"]]
+                    )
                     atomic_write(path, completed)
                 except Exception as error:  # noqa: BLE001 -- save other completed futures, then fail with a redacted error
                     errors.append(error)
@@ -240,5 +249,4 @@ def run(
                 raise RuntimeError(
                     f"OpenAI request failed ({type(first).__name__}, HTTP {getattr(first, 'status_code', 'unavailable')}); completed responses are saved. Resume the same run after resolving the error."
                 ) from None
-    indexed = {p["id"]: p for p in completed}
-    return [indexed[row["id"]] for row in rows], manifest
+    return completed, manifest

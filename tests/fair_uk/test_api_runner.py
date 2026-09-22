@@ -233,6 +233,10 @@ def test_refusals_truncation_thought_exclusion_and_exact_model_pin():
     refusal = raw()
     refusal["choices"][0]["message"] = {"content": None, "refusal": "Cannot answer"}
     assert api_runner.response_details(refusal, config())[1]["refusal"]
+    response = raw("gemini")
+    response["promptFeedback"] = {"blockReason": "BLOCK_REASON_UNSPECIFIED"}
+    text, detail = api_runner.response_details(response, config("gemini"))
+    assert text == "C" and detail["prompt_block"] is None and not detail["refusal"]
     with pytest.raises(ValueError, match="expected_response_model"):
         api_runner.response_details(
             raw(), config(expected_response_model="different-snapshot")
@@ -392,6 +396,128 @@ def test_malformed_success_keeps_raw_evidence_and_never_repeats(tmp_path):
     assert len(calls) == 1
     checkpoint = json.loads(next((tmp_path / "responses").glob("*.json")).read_text())
     assert checkpoint["api_response"] == {"unexpected": "raw provider data"}
+
+
+@pytest.mark.parametrize(
+    "provider,body",
+    [
+        ("openai-compatible", {"choices": [{}]}),
+        ("openai-compatible", {"choices": [{"finish_reason": "stop"}]}),
+        ("openai-compatible", {"choices": [{"message": {"content": "C"}}]}),
+        (
+            "openai-compatible",
+            {"choices": [{"message": {}, "finish_reason": "stop"}]},
+        ),
+        *[
+            (
+                "openai-compatible",
+                {"choices": [{"message": {"content": value}, "finish_reason": "stop"}]},
+            )
+            for value in (None, False, 0, [])
+        ],
+        ("gemini", {"candidates": [{}]}),
+        ("gemini", {"promptFeedback": {"blockReason": "BLOCK_REASON_UNSPECIFIED"}}),
+        ("gemini", {"candidates": [{"finishReason": "STOP"}]}),
+        ("gemini", {"candidates": [{"content": {"parts": [{"text": "C"}]}}]}),
+        *[
+            (
+                "gemini",
+                {"candidates": [{"content": {"parts": parts}, "finishReason": "STOP"}]},
+            )
+            for parts in ([], [{}], [{"text": None}], [{"text": False}], "C")
+        ],
+    ],
+)
+def test_malformed_candidate_stops_without_scoring_or_repeating(
+    provider, body, tmp_path
+):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=body)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(RuntimeError, match="raw checkpoint was saved"):
+            api_runner.run([row()], {}, config(provider), tmp_path, client=client)
+        raw_path = next((tmp_path / "responses").glob("*.json"))
+        checkpoint = raw_path.read_bytes()
+        with pytest.raises(ValueError):
+            api_runner.run([row()], {}, config(provider), tmp_path, client=client)
+    assert len(calls) == 1
+    assert raw_path.read_bytes() == checkpoint
+    assert json.loads(checkpoint)["api_response"] == body
+    assert not (tmp_path / "predictions.jsonl").exists()
+    status = json.loads((tmp_path / "status.json").read_text())
+    assert status["state"] == "invalid_provider_response"
+    assert status["completed"] == 0
+
+
+@pytest.mark.parametrize(
+    "provider,body,refusal,truncated",
+    [
+        (
+            "openai-compatible",
+            {"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]},
+            False,
+            False,
+        ),
+        (
+            "openai-compatible",
+            {
+                "choices": [
+                    {"message": {"refusal": "Cannot answer"}, "finish_reason": "stop"}
+                ]
+            },
+            True,
+            False,
+        ),
+        *[
+            (
+                "openai-compatible",
+                {"choices": [{"message": {"content": None}, "finish_reason": finish}]},
+                finish == "content_filter",
+                finish == "length",
+            )
+            for finish in ("content_filter", "length")
+        ],
+        (
+            "gemini",
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": ""}]}, "finishReason": "STOP"}
+                ]
+            },
+            False,
+            False,
+        ),
+        *[
+            (
+                "gemini",
+                {"candidates": [{"finishReason": finish}]},
+                finish == "SAFETY",
+                finish == "MAX_TOKENS",
+            )
+            for finish in ("SAFETY", "MAX_TOKENS")
+        ],
+        ("gemini", {"promptFeedback": {"blockReason": "SAFETY"}}, True, False),
+    ],
+)
+def test_explicit_empty_answers_refusals_and_truncations_remain_scored(
+    provider, body, refusal, truncated, tmp_path
+):
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body))
+    ) as client:
+        predictions, _ = api_runner.run(
+            [row()], {}, config(provider), tmp_path, client=client
+        )
+    prediction = predictions[0]
+    assert prediction["response"] == ""
+    assert prediction["diagnostics"]["refusal"] is refusal
+    assert prediction["diagnostics"]["truncated"] is truncated
+    assert api_runner.score_item(row(), prediction)["invalid"] == 1
+    assert json.loads((tmp_path / "status.json").read_text())["state"] == "complete"
 
 
 def test_completed_records_survive_later_failure_and_stop_marker(tmp_path, monkeypatch):

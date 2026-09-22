@@ -337,7 +337,14 @@ def response_details(raw, config_or_identity):
         raise TypeError("Provider response must be a JSON object")
     if model["provider"] == "gemini":
         candidates = raw.get("candidates", [])
-        block = raw.get("promptFeedback", {}).get("blockReason")
+        feedback = raw.get("promptFeedback")
+        if feedback is not None and not isinstance(feedback, dict):
+            raise ValueError("Expected Gemini prompt feedback to be an object")
+        block = (feedback or {}).get("blockReason")
+        if block is not None and (not isinstance(block, str) or not block.strip()):
+            raise ValueError("Expected an explicit Gemini prompt-block reason")
+        if block == "BLOCK_REASON_UNSPECIFIED":
+            block = None
         if (
             not isinstance(candidates, list)
             or len(candidates) > 1
@@ -345,18 +352,15 @@ def response_details(raw, config_or_identity):
         ):
             raise ValueError("Expected one candidate or an explicit prompt block")
         candidate = candidates[0] if candidates else {}
-        pieces = candidate.get("content", {}).get("parts", [])
-        text = "".join(p.get("text", "") for p in pieces if not p.get("thought"))
+        if not isinstance(candidate, dict):
+            raise ValueError("Expected a Gemini candidate object")
         finish = candidate.get("finishReason")
-        usage = raw.get("usageMetadata") or {}
-        input_tokens = _count(usage, "promptTokenCount")
-        answer_tokens = _count(usage, "candidatesTokenCount")
-        reasoning_tokens = _count(usage, "thoughtsTokenCount")
-        output_tokens = (
-            None if answer_tokens is None else answer_tokens + (reasoning_tokens or 0)
-        )
-        cached_tokens = _count(usage, "cachedContentTokenCount")
-        returned_model = raw.get("modelVersion")
+        if candidates and (
+            not isinstance(finish, str)
+            or not finish.strip()
+            or finish == "FINISH_REASON_UNSPECIFIED"
+        ):
+            raise ValueError("Expected a terminal Gemini finish reason")
         refusal = bool(
             block
             or finish
@@ -370,16 +374,55 @@ def response_details(raw, config_or_identity):
             )
         )
         truncated = finish == "MAX_TOKENS"
+        content = candidate.get("content")
+        if content is None and (refusal or truncated):
+            content = {}
+        if not isinstance(content, dict):
+            raise ValueError(
+                "Expected Gemini text content or an explicit block/truncation"
+            )
+        pieces = content.get("parts", [] if refusal or truncated else None)
+        if not isinstance(pieces, list) or any(
+            not isinstance(piece, dict)
+            or ("text" in piece and not isinstance(piece["text"], str))
+            for piece in pieces
+        ):
+            raise ValueError("Expected Gemini text parts")
+        if not any("text" in piece for piece in pieces) and not (refusal or truncated):
+            raise ValueError(
+                "Expected Gemini text parts or an explicit block/truncation"
+            )
+        text = "".join(p.get("text", "") for p in pieces if not p.get("thought"))
+        usage = raw.get("usageMetadata") or {}
+        input_tokens = _count(usage, "promptTokenCount")
+        answer_tokens = _count(usage, "candidatesTokenCount")
+        reasoning_tokens = _count(usage, "thoughtsTokenCount")
+        output_tokens = (
+            None if answer_tokens is None else answer_tokens + (reasoning_tokens or 0)
+        )
+        cached_tokens = _count(usage, "cachedContentTokenCount")
+        returned_model = raw.get("modelVersion")
     else:
         choices = raw.get("choices")
         if not isinstance(choices, list) or len(choices) != 1:
             raise ValueError("Expected exactly one chat completion choice")
-        message = choices[0].get("message", {})
-        text = message.get("content") or ""
+        choice = choices[0]
+        if not isinstance(choice, dict) or not isinstance(choice.get("message"), dict):
+            raise ValueError("Expected a chat completion message object")
+        finish = choice.get("finish_reason")
+        if not isinstance(finish, str) or not finish.strip():
+            raise ValueError("Expected a terminal chat completion finish reason")
+        message = choice["message"]
+        refusal_text = message.get("refusal")
+        if refusal_text is not None and not isinstance(refusal_text, str):
+            raise ValueError("Expected a text refusal")
+        refusal = bool(refusal_text or finish == "content_filter")
+        truncated = finish == "length"
+        text = message.get("content")
+        if text is None and (refusal or truncated):
+            text = ""
         if not isinstance(text, str):
-            raise ValueError("Expected a text completion")
-        finish = choices[0].get("finish_reason")
-        refusal = bool(message.get("refusal") or finish == "content_filter")
+            raise ValueError("Expected text content or an explicit refusal/truncation")
         block = "content_filter" if finish == "content_filter" else None
         usage = raw.get("usage") or {}
         input_tokens = _count(usage, "prompt_tokens")
@@ -391,7 +434,6 @@ def response_details(raw, config_or_identity):
             usage.get("completion_tokens_details") or {}, "reasoning_tokens"
         )
         returned_model = raw.get("model")
-        truncated = finish == "length"
     if (
         cached_tokens is not None
         and input_tokens is not None

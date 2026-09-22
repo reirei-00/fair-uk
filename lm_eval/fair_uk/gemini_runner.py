@@ -184,6 +184,8 @@ def run(
         raise ValueError("Checkpoint has duplicate or unexpected IDs")
     for prediction in completed:
         validate_prediction(indexed[prediction["id"]], prediction, model)
+    source_order = {row["id"]: index for index, row in enumerate(rows)}
+    completed.sort(key=lambda prediction: source_order[prediction["id"]])
     done = set(ids)
     pending = [r for r in rows if r["id"] not in done]
     if estimate(pending, model_name)["cost_usd_upper_estimate"] > max_estimated_usd:
@@ -200,6 +202,9 @@ def run(
     run_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     )
+    # Repair legacy completion-order checkpoints on partial and complete resumes.
+    if ids != [prediction["id"] for prediction in completed]:
+        atomic_write(path, completed)
 
     def predict(row):
         payload = request_payload(row, model)
@@ -249,6 +254,9 @@ def run(
                 for future in as_completed(futures):
                     try:
                         completed.append(future.result())
+                        completed.sort(
+                            key=lambda prediction: source_order[prediction["id"]]
+                        )
                         atomic_write(path, completed)
                     except Exception as error:  # noqa: BLE001 -- checkpoint completed peers before failing safely
                         errors.append(error)
@@ -267,5 +275,4 @@ def run(
     finally:
         if owns_client:
             client.close()
-    by_id = {p["id"]: p for p in completed}
-    return [by_id[row["id"]] for row in rows], manifest
+    return completed, manifest

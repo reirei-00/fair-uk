@@ -276,6 +276,43 @@ def test_api_preview_rejects_likelihood_tasks_before_source_access(
     assert not output.exists()
 
 
+@pytest.mark.parametrize("provider", ["openai-compatible", "gemini"])
+def test_malformed_api_success_cannot_produce_a_benchmark_report(
+    provider, tmp_path, local_sources, monkeypatch
+):
+    _, configuration = provider_config(tmp_path, provider)
+    forbid_named_key(monkeypatch)
+    output = tmp_path / "malformed-run"
+    calls = []
+    body = {"candidates": [{}]} if provider == "gemini" else {"choices": [{}]}
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=body)
+
+    original_run = api_runner.run
+
+    def mocked_run(rows, manifest, config, destination):
+        with httpx.Client(
+            transport=httpx.MockTransport(handler), trust_env=False
+        ) as client:
+            return original_run(rows, manifest, config, destination, client=client)
+
+    monkeypatch.setattr(api_runner, "run", mocked_run)
+    arguments = run_arguments("uk", local_sources["uk"], configuration, output) + [
+        "--execute"
+    ]
+    with pytest.raises(RuntimeError, match="raw checkpoint was saved"):
+        cli.main(arguments)
+    with pytest.raises(ValueError):
+        cli.main(arguments)
+    assert len(calls) == 1
+    assert json.loads((output / "status.json").read_text())["completed"] == 0
+    assert len(list((output / "responses").glob("*.json"))) == 1
+    for name in ("report.json", "report.md", "records.jsonl", "predictions.jsonl"):
+        assert not (output / name).exists()
+
+
 def test_bad_config_is_not_echoed_and_cannot_load_data(tmp_path, monkeypatch, capsys):
     _, configuration = provider_config(tmp_path, "openai-compatible")
     configuration.write_text(
