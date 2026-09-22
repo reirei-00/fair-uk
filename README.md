@@ -20,11 +20,12 @@ source .venv/bin/activate
 pip install -e '.[fair-uk]'
 
 fair-uk-eval list --format table
+fair-uk-eval metrics --task bbq_uk
 fair-uk-eval validate --task warbias_intersectional_uk
 fair-uk-eval suite
 ```
 
-These commands list datasets, validate one pinned dataset and preview the six-task Ukrainian bias suite without running a model. To run the suite against a pinned Hugging Face causal model:
+These commands list datasets and metric definitions, validate one pinned dataset and preview the six-task Ukrainian bias suite without running a model. To run the suite against a pinned Hugging Face causal model:
 
 ```sh
 fair-uk-eval suite --execute \
@@ -33,7 +34,7 @@ fair-uk-eval suite --execute \
   --output results/my-model
 ```
 
-Replace the model and revision placeholders. The default suite runs full Ukrainian datasets; use `--tasks` to select tasks or include the English WarBias counterparts. See [runner support and the suite guide](docs/benchmark-suite.md) for API limitations.
+Replace the model and revision placeholders. The default suite runs full Ukrainian datasets. Select benchmark families with `--benchmarks` and languages with `--languages uk en`. WarBias English is registered; the other English counterparts use a verified local dataset bundle pending HF publication. See the [suite guide](docs/benchmark-suite.md) and [bilingual data audit](docs/bilingual-data-audit.md).
 
 ## Benchmarks
 
@@ -62,6 +63,9 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 | I want to… | Guide |
 | --- | --- |
 | List datasets or run the Ukrainian bias suite | [Suite and backend support](docs/benchmark-suite.md) |
+| Configure a hosted model or API endpoint | [Generic hosted models](docs/hosted-models.md) |
+| Understand each dataset’s own metrics | [Metric specification](docs/metric-specification.md) |
+| Prepare matched English counterparts | [Bilingual data audit](docs/bilingual-data-audit.md) |
 | Evaluate Gemini models on WarBias | [Gemini pilot guide](docs/gemini-warbias-pilot.md) |
 | Evaluate OpenAI models on WarBias | [OpenAI pilot guide](docs/openai-warbias-pilot.md) |
 | Run a model or rescore predictions | [Installation and usage](docs/fair-uk.md) |
@@ -70,6 +74,7 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 | Understand group metrics and uncertainty | [Worst-group comparisons](docs/worst-group-metrics.md) |
 | Check validation and release limitations | [Pilot release notes](docs/fair-uk-release.md) |
 | See planned work | [Development roadmap](docs/fair-uk-roadmap.md) |
+| See what remains to finish the suite | [Completion checklist](docs/completion-checklist.md) |
 
 ## Built on EleutherAI's evaluation harness
 

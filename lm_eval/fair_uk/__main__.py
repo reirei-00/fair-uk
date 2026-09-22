@@ -9,7 +9,8 @@ from pathlib import Path
 
 from lm_eval.fair_uk import VERSION
 from lm_eval.fair_uk.answers import NORMALIZED, POLICIES
-from lm_eval.fair_uk.data import REGISTRY, load, select_clusters
+from lm_eval.fair_uk.capabilities import task_metadata, validate_backend
+from lm_eval.fair_uk.data import dataset_spec, load, merged_registry, select_clusters
 from lm_eval.fair_uk.metrics import make_report, score_all
 from lm_eval.fair_uk.provenance import code_identity
 from lm_eval.fair_uk.reporting import (
@@ -34,15 +35,28 @@ def main(argv=None):
         from lm_eval.fair_uk.suite import main as suite_main
 
         return suite_main(argv[1:])
+    bundle_parser = argparse.ArgumentParser(add_help=False)
+    bundle_parser.add_argument("--dataset-bundle", type=Path)
+    bundle_args, _ = bundle_parser.parse_known_args(argv)
+    registry = merged_registry(bundle_args.dataset_bundle)
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("suite", help="Plan or explicitly run a set of bias benchmarks")
-    listing = commands.add_parser("list", help="List pinned benchmark tasks")
+    listing = commands.add_parser(
+        "list", help="List pinned benchmark tasks", parents=[bundle_parser]
+    )
     listing.add_argument("--format", choices=("json", "table"), default="json")
     listing.add_argument("--language", choices=("uk", "en"))
-    for command in ("validate", "run", "score", "run-openai", "run-gemini"):
-        sub = commands.add_parser(command)
-        sub.add_argument("--task", choices=sorted(REGISTRY), required=True)
+    metric_listing = commands.add_parser(
+        "metrics",
+        help="Describe benchmark-specific and additional group metrics",
+        parents=[bundle_parser],
+    )
+    metric_listing.add_argument("--task", choices=sorted(registry))
+    metric_listing.add_argument("--format", choices=("json", "table"), default="table")
+    for command in ("validate", "run", "score", "run-openai", "run-gemini", "run-api"):
+        sub = commands.add_parser(command, parents=[bundle_parser])
+        sub.add_argument("--task", choices=sorted(registry), required=True)
         sub.add_argument(
             "--input",
             type=Path,
@@ -59,6 +73,7 @@ def main(argv=None):
             sub.add_argument("--model-args", required=True)
             sub.add_argument("--batch-size", default="auto")
             sub.add_argument("--chunk-size", type=int, default=32)
+            sub.add_argument("--max-output-tokens", type=int, default=128)
         if command == "run-openai":
             from lm_eval.fair_uk.openai_runner import SNAPSHOTS
 
@@ -77,9 +92,23 @@ def main(argv=None):
             sub.add_argument("--concurrency", type=int, default=4)
             sub.add_argument("--max-estimated-usd", type=float, default=2.0)
             sub.add_argument("--dry-run", action="store_true")
+        if command == "run-api":
+            sub.add_argument(
+                "--config",
+                type=Path,
+                required=True,
+                help="Provider configuration JSON; API secrets belong in environment variables",
+            )
+            sub.add_argument(
+                "--execute",
+                action="store_true",
+                help="Make model requests; otherwise show an offline estimate",
+            )
         if command == "score":
             sub.add_argument("--predictions", type=Path, required=True)
-    compare = commands.add_parser("compare", help="Compare paired UK/EN WarBias runs")
+    compare = commands.add_parser(
+        "compare", help="Compare paired UK/EN benchmark runs", parents=[bundle_parser]
+    )
     compare.add_argument("--uk-run", type=Path, required=True)
     compare.add_argument("--en-run", type=Path, required=True)
     compare.add_argument("--uk-input", type=Path)
@@ -109,30 +138,69 @@ def main(argv=None):
             args.bootstrap,
             args.seed,
             answer_policy=args.answer_policy,
+            dataset_bundle=args.dataset_bundle,
         )
         args.output.mkdir(parents=True, exist_ok=True)
         write_json(args.output / "comparison.json", report)
         (args.output / "comparison.md").write_text(paired_markdown(report))
         print(f"Comparison written to {args.output.resolve() / 'comparison.md'}")
         return
+    if args.command == "metrics":
+        from lm_eval.fair_uk.metric_specs import metric_catalog
+
+        catalog = metric_catalog(args.task)
+        if args.format == "json":
+            print(json.dumps(catalog, ensure_ascii=False, indent=2))
+        else:
+            catalogs = [catalog] if args.task else catalog["benchmarks"].values()
+            for entry in catalogs:
+                print(f"\n{entry['family']} — {entry['version']}\n")
+                print(
+                    table(
+                        ["Metric", "Unit", "Direction", "Definition", "Denominator"],
+                        [
+                            (
+                                m["id"],
+                                m["unit"],
+                                m["direction"],
+                                m["definition"],
+                                m["denominator"],
+                            )
+                            for m in entry["metrics"]
+                        ],
+                    )
+                )
+                print("\nAdditional worst-group analysis:\n")
+                print(
+                    json.dumps(
+                        entry["additional_group_metrics"], ensure_ascii=False, indent=2
+                    )
+                )
+        return
     if args.command == "list":
         selected = {
             task: spec
-            for task, spec in REGISTRY.items()
+            for task, spec in registry.items()
             if args.language is None or spec["language"] == args.language
         }
         if args.format == "table":
             print(
                 table(
-                    ["Task", "Language", "Rows", "Scoring input", "HF dataset"],
+                    [
+                        "Task",
+                        "Language",
+                        "Rows",
+                        "Required capability",
+                        "Requests/row",
+                        "Dataset",
+                    ],
                     [
                         (
                             task,
                             spec["language"],
                             spec["rows"],
-                            "generated answer"
-                            if task.startswith("warbias_")
-                            else "token log probabilities",
+                            task_metadata(task)["required_capability"],
+                            task_metadata(task)["requests_per_row"],
                             spec["repo"],
                         )
                         for task, spec in sorted(selected.items())
@@ -145,7 +213,18 @@ def main(argv=None):
         else:
             print(json.dumps(selected, indent=2))
         return
-    registry_rows = load(args.task, args.input)
+    api_config = None
+    if args.command == "run-api":
+        from lm_eval.fair_uk.api_runner import identity
+
+        validate_backend([args.task], "api")
+        api_config = json.loads(args.config.read_text())
+        identity(api_config)  # Configuration validation never reads credentials.
+    if args.command == "run":
+        validate_backend([args.task], args.model)
+        if args.max_output_tokens < 1:
+            parser.error("--max-output-tokens must be positive")
+    registry_rows = load(args.task, args.input, dataset_bundle=args.dataset_bundle)
     rows = select_clusters(registry_rows, args.limit_clusters_per_stratum)
     if args.command == "validate":
         print(
@@ -162,6 +241,11 @@ def main(argv=None):
         return
     if args.bootstrap < 0:
         parser.error("--bootstrap cannot be negative")
+    if args.command == "run-api" and not args.execute:
+        from lm_eval.fair_uk.api_runner import estimate
+
+        print(json.dumps(estimate(rows, api_config), ensure_ascii=False, indent=2))
+        return
     if args.command in ("run-openai", "run-gemini") and args.dry_run:
         from lm_eval.fair_uk.openai_runner import estimate, identity, request_payload
 
@@ -180,7 +264,7 @@ def main(argv=None):
     run = {
         "version": VERSION,
         "code_identity": code_identity(),
-        "dataset": REGISTRY[args.task],
+        "dataset": dataset_spec(args.task, args.dataset_bundle),
         "task": args.task,
         "protocol": rows[0]["protocol"],
         "selected_ids_sha256": hashlib.sha256(
@@ -198,6 +282,13 @@ def main(argv=None):
 
         run.update(
             model_backend=args.model,
+            generation_config={
+                "max_output_tokens": args.max_output_tokens,
+                "temperature": 0.0,
+                "do_sample": False,
+            }
+            if args.task.startswith("warbias_")
+            else None,
             batch_size=str(args.batch_size),
             model_identity=model_identity(args.model_args),
             seed=args.seed,
@@ -227,8 +318,17 @@ def main(argv=None):
             args.model_args, {"batch_size": args.batch_size}
         )
         predictions = run_predictions(
-            backend, rows, args.output / "predictions.jsonl", args.chunk_size
+            backend,
+            rows,
+            args.output / "predictions.jsonl",
+            args.chunk_size,
+            max_output_tokens=args.max_output_tokens,
         )
+    elif args.command == "run-api":
+        from lm_eval.fair_uk.api_runner import run as run_api
+
+        run.update(seed=args.seed)
+        predictions, run = run_api(rows, run, api_config, args.output)
     elif args.command == "run-openai":
         from lm_eval.fair_uk.openai_runner import run as run_openai
 
@@ -275,11 +375,22 @@ def main(argv=None):
         version=VERSION,
         report_schema_version=2,
         scorer_code_identity=code_identity(),
+        predictions_sha256=hashlib.sha256(
+            "".join(
+                json.dumps(p, sort_keys=True, ensure_ascii=False, allow_nan=False)
+                + "\n"
+                for p in predictions
+            ).encode()
+        ).hexdigest(),
     )
     if args.command == "run-gemini":
         from lm_eval.fair_uk.gemini_runner import usage_summary
 
         report["api_usage"] = usage_summary(predictions, args.snapshot)
+    if args.command == "run-api":
+        from lm_eval.fair_uk.api_runner import usage_summary
+
+        report["api_usage"] = usage_summary(predictions, api_config)
     write_json(args.output / "report.json", report)
     (args.output / "records.jsonl").write_text(
         "".join(

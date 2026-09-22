@@ -11,6 +11,17 @@ from lm_eval.fair_uk.provenance import model_identity
 from lm_eval.fair_uk.runner import predict
 
 
+@pytest.fixture(autouse=True)
+def cpu_fixture_does_not_initialize_optional_mlx(monkeypatch):
+    # These tests exercise PyTorch CPU fixtures. A globally installed MLX must
+    # not initialize Metal while Transformers converts tokenizer outputs.
+    try:
+        import transformers.utils.import_utils as imports
+    except ImportError:
+        return
+    monkeypatch.setattr(imports, "_mlx_available", False, raising=False)
+
+
 def qa_fixture(path):
     rows = []
     for case in range(2):
@@ -178,6 +189,8 @@ def test_real_harness_generation_resume_and_offline_rescore(tmp_path, monkeypatc
         "--model-args",
         f"pretrained={model},device=cpu",
         "--batch-size",
+        "4",
+        "--max-output-tokens",
         "4",
         "--output",
         str(output),
