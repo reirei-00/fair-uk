@@ -23,7 +23,7 @@ def try_parse_json(value: str | dict[str, Any] | None) -> str | dict[str, Any] |
     try:
         return json.loads(value)
     except json.JSONDecodeError:
-        if "{" in value:
+        if value.lstrip().startswith("{"):
             raise ValueError(
                 f"Invalid JSON: {value}. Hint: Use double quotes for JSON strings."
             ) from None
@@ -101,8 +101,10 @@ def handle_cli_value_string(arg: str) -> bool | int | float | str:
         return True
     elif arg.lower() == "false":
         return False
-    elif arg.isnumeric():
+    try:
         return int(arg)
+    except ValueError:
+        pass
     try:
         return float(arg)
     except ValueError:
