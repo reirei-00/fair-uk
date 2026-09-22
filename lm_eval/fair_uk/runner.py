@@ -61,7 +61,9 @@ def encode_request(backend, request, sentence=False):
     return (key, context, continuation)
 
 
-def predict(backend, rows):
+def predict(backend, rows, max_output_tokens=128):
+    if not isinstance(max_output_tokens, int) or max_output_tokens < 1:
+        raise ValueError("Output token limit must be a positive integer")
     kind = family(rows[0]["task"])
     if kind == "warbias":
         requests = [
@@ -72,7 +74,7 @@ def predict(backend, rows):
                     prompts(row)[0]["context"],
                     {
                         "until": [],
-                        "max_gen_toks": 16,
+                        "max_gen_toks": max_output_tokens,
                         "do_sample": False,
                         "temperature": 0.0,
                     },
@@ -85,7 +87,10 @@ def predict(backend, rows):
         # remain responsible for their own context-limit errors.
         if callable(getattr(backend, "tok_encode", None)):
             for request in requests:
-                if len(backend.tok_encode(request.args[0])) + 16 > backend.max_length:
+                if (
+                    len(backend.tok_encode(request.args[0])) + max_output_tokens
+                    > backend.max_length
+                ):
                     raise ValueError("Generation input exceeds backend context length")
         responses = backend.generate_until(requests)
         if len(responses) != len(rows):
@@ -124,7 +129,7 @@ def predict(backend, rows):
     return predictions
 
 
-def run_predictions(backend, rows, path, chunk_size=32):
+def run_predictions(backend, rows, path, chunk_size=32, max_output_tokens=128):
     """Resume only complete item records; the CLI validates the run manifest first."""
     if chunk_size < 1:
         raise ValueError("Chunk size must be positive")
@@ -145,7 +150,7 @@ def run_predictions(backend, rows, path, chunk_size=32):
     pending = [r for r in rows if r["id"] not in completed_ids]
     for start in range(0, len(pending), chunk_size):
         batch = pending[start : start + chunk_size]
-        predictions = predict(backend, batch)
+        predictions = predict(backend, batch, max_output_tokens=max_output_tokens)
         for row, prediction in zip(batch, predictions, strict=True):
             score_item(row, prediction)
         completed.extend(predictions)

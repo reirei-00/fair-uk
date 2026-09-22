@@ -1,133 +1,203 @@
-# Fair-UK evaluation tool
+# Fair-UK usage guide
 
-Fair-UK supports the WarBias study in Ukrainian and English, with BBQ-UK, StereoSet-UK and WinoBias-UK as complementary evaluations. It uses EleutherAI harness model backends and produces a reproducible report with native benchmark scores, subgroup rates, absolute worst-group performance, disparity gaps and minimum/maximum rate ratios.
+[Run a suite](#run-a-suite) · [Datasets](#registered-datasets-and-protocols) · [Hosted models](#hosted-models) · [Bilingual data](#bilingual-data) · [Outputs](#outputs-and-rescoring) · [Comparisons](#paired-language-comparisons) · [Metrics](worst-group-metrics.md)
 
-This first implementation uses **pilot, human-unvalidated HF releases**. It reads evaluation datasets only; it does not create annotation assignments or modify annotation materials. It requires no unbiased reference model. Activation analysis is outside this release.
+Fair-UK evaluates pilot, human-unvalidated datasets without requiring an unbiased reference model. It reads evaluation data only; activation analysis and annotation workflows are outside this tool.
 
-## Install and run
+## Run a suite
 
-From this fork, use a dedicated Python environment:
+Install from this checkout in a Python 3.10+ virtual environment:
 
 ```sh
 pip install -e '.[fair-uk]'
-fair-uk-eval list
+fair-uk-eval list --format table
+fair-uk-eval metrics --task bbq_uk
 fair-uk-eval validate --task warbias_intersectional_uk
-fair-uk-eval run \
-  --task warbias_intersectional_uk \
-  --model hf \
-  --model-args 'pretrained=YOUR_MODEL,revision=IMMUTABLE_40_CHARACTER_COMMIT,device=cuda' \
-  --batch-size 8 \
-  --output results/warbias_intersectional_uk
+fair-uk-eval suite
 ```
 
-Replace the model and revision placeholders with an actual model and commit. A self-contained local model directory can be supplied as `pretrained=/path/to/model` without `revision`; its files are hashed. Use `device=cpu` for a CPU run. The equivalent module command is `python -m lm_eval.fair_uk`.
+`list` shows available tasks; its JSON format includes pinned revisions and checksums. Add `--language uk` or `--language en` to filter it. `metrics` shows definitions, units and denominators. `validate` loads and checks one dataset. `suite` previews six Ukrainian tasks (64,255 rows) without downloading data, loading models or reading API credentials.
 
-`--limit-clusters-per-stratum 2` provides a smoke subset while retaining complete paired cases. It takes two cases in **each** source stratum, not two rows in total, and labels the report as partial. For StereoSet, strata are lexical targets; for BBQ, they are reporting categories; for WinoBias, split/type; for WarBias, status. There is no random row-level limit.
+Run a compatible causal checkpoint by replacing the placeholders:
 
-Repeated runs with the same output directory resume completed predictions only if the model, dataset, protocol, runtime and selected IDs match the saved manifest. Changed model weights or revisions require a new output directory. A chunk is saved atomically after all its candidate requests finish. Interrupted chunks are recomputed. Changing only bootstrap settings does not rerun completed inference.
+```sh
+fair-uk-eval suite --execute \
+  --model hf \
+  --model-args 'pretrained=YOUR_MODEL,revision=IMMUTABLE_40_CHARACTER_COMMIT,device=cuda' \
+  --batch-size 8 --output results/my-model
+```
 
-Hugging Face causal models are integration-tested. Likelihood execution also accepts the harness's vLLM token-scoring interface, but GPU/vLLM execution has not been validated in this release. It requires its own environment and dependencies. Separate tokenizer overrides, adapters, delta weights and GGUF artifacts are rejected until their provenance is supported. Prompts use the documented raw protocol; chat formatting is not silently applied.
+A self-contained local checkpoint can use `pretrained=/absolute/path/to/model,device=cuda`; its files are hashed. `device=cpu` is also supported. Separate tokenizer overrides, adapters, delta weights and GGUF artifacts are rejected until their provenance is supported. Checkpoint prompts use the raw protocol without silently applying chat templates. The equivalent CLI is `python -m lm_eval.fair_uk`.
+
+| Selection | Arguments |
+| --- | --- |
+| Default full Ukrainian suite | No task-selection flags |
+| Named tasks | `--tasks warbias_uk bbq_uk` |
+| Both WarBias tracks in both languages | `--benchmarks warbias warbias_intersectional --languages uk en` |
+| All tracks in both languages | `--languages uk en --dataset-bundle /path/to/manifest.json` |
+| Partial smoke subset | `--limit-clusters-per-stratum 2` |
+
+A source-case limit preserves complete panels and takes that many cases in **each** stratum: status for WarBias, reporting category for BBQ, lexical target for StereoSet, and split/type for WinoBias. It is not a random row sample. Partial runs are labeled. For one checkpoint task, use `fair-uk-eval run --task TASK` with the same model/output options; this command executes directly.
+
+Checkpoint generation defaults to 128 output tokens; change it with `--max-output-tokens`. Each suite task runs in a separate process, with results under `<output>/<task>/`. Failure stops later tasks; termination is forwarded to the active model process. `suite.json` records progress. Repeating the same suite configuration verifies completed results and resumes unfinished tasks; changed settings or altered tracked results require a new output directory. An interrupted checkpoint chunk is recomputed.
 
 ## Registered datasets and protocols
 
-Every task has an immutable dataset revision, filename, expected row count and SHA-256 in [`datasets.json`](../lm_eval/fair_uk/datasets.json). Local `--input` files must match that checksum. The registry deliberately pins known releases rather than following mutable `main`.
+[`datasets.json`](../lm_eval/fair_uk/datasets.json) pins each public dataset's immutable revision, filename, row count and SHA-256. A local `--input` must match that checksum. These counts refer to pinned releases, not mutable HF branches.
 
-| Task | Rows | Protocol |
-| --- | ---: | --- |
-| `warbias_uk`, `warbias_en` | 240 each | Strict generated A/B/C; six context/polarity variants per source case |
-| `warbias_intersectional_uk`, `warbias_intersectional_en` | 1,320 each | Same generation protocol, with 11 shared demographic profiles across the two statuses |
-| `bbq_uk` | 58,492 | Mean answer-token log probability, averaged over three cyclic answer orders |
-| `stereoset_uk` | 949 | Mean full-sentence causal token log probability; target-macro SS, LMS and ICAT |
-| `winobias_uk_natural` | 1,674 | Mean A/B token log probability; deterministic target placement; primary and grammatical controls separate |
-| `winobias_uk_controlled` | 1,580 | Mean A/B token log probability at fixed released candidate positions; test split, types separate |
+| Dataset | Public tasks | Rows per task | Scoring protocol |
+| --- | --- | ---: | --- |
+| [WarBias base](https://huggingface.co/datasets/FairForget/WarBias) | `warbias_uk`, `warbias_en` | 240 | A/B/C generation; six evidence/polarity variants per case |
+| [WarBias intersectional](https://huggingface.co/datasets/FairForget/WarBias) | `warbias_intersectional_uk`, `warbias_intersectional_en` | 1,320 | Same protocol; 11 status–gender–age cells across both statuses |
+| [BBQ-UK](https://huggingface.co/datasets/FairForget/BBQ-UK) | `bbq_uk` | 58,492 | Mean answer-token log probability over three cyclic answer orders |
+| [StereoSet-UK Eval](https://huggingface.co/datasets/FairForget/StereoSet-UK-Eval) | `stereoset_uk` | 949 | Mean full-sentence causal token log probability |
+| [WinoBias-UK Natural](https://huggingface.co/datasets/FairForget/WinoBias-UK-Natural) | `winobias_uk_natural` | 1,674 | Mean A/B token log probability; deterministic target placement |
+| [WinoBias-UK Controlled](https://huggingface.co/datasets/FairForget/WinoBias-UK-Controlled) | `winobias_uk_controlled` | 1,580 | Mean A/B token log probability at released candidate positions |
 
-The Natural release covers 279 validation/type1 cases. Controlled covers 790 test cases. They are not directly comparable pooled sets. The StereoSet release covers 949 items and 79 targets, not the full original development benchmark.
+Natural WinoBias covers 279 validation/type1 cases; Controlled covers 790 test cases, with types reported separately. StereoSet covers 949 original items and 79 targets. These subsets and protocols are not interchangeable with full original English benchmarks.
 
-The intersectional WarBias revision is the verified content of [dataset PR #21](https://huggingface.co/datasets/FairForget/WarBias/discussions/21), now merged into HF `main`. The registry keeps the same immutable content revision. The original HF repository namespaces remain intact for provenance.
+Likelihood adapters use the harness's token-scoring interface, count retokenized prompt suffixes in the continuation, and divide by the actual scored-token count. StereoSet prefixes each sentence with BOS, otherwise PAD or EOS. Inputs exceeding the context window fail rather than silently truncate. BBQ uses nine requests per row, StereoSet three, and WinoBias two.
 
-For likelihood tasks, the runner uses the harness's `_loglikelihood_tokens` backend interface to preserve exact token boundaries from the reference evaluators. Retokenized prompt suffixes belong to the scored continuation, and scores are divided by the actual number of scored tokens. Full-sentence StereoSet starts from BOS, otherwise PAD or EOS, as in the reference. Inputs that exceed the model context window fail rather than being silently truncated. This backend interface is covered by a smoke test and should be rechecked when updating upstream.
+These tasks run through `fair-uk-eval`; they are not generic `lm-eval --tasks` YAML tasks. Hugging Face integration has offline tests. The vLLM interface is supported with its own dependencies, but GPU/vLLM execution remains unverified. Text-only chat APIs cannot supply the candidate scores required by BBQ, StereoSet or WinoBias.
 
-These adapters are accessed through **`fair-uk-eval`**, not registered as generic `lm-eval --tasks` YAML definitions. Upstream task loading and generic multiple-choice defaults do not implement all these protocols. The original `lm-eval` command remains available unchanged.
+## Hosted models
+
+Install `pip install -e '.[fair-uk-api]'`. Use `run-api` for any compatible OpenAI-style chat endpoint or Gemini `generateContent` model. Keep credentials in an environment variable; the configuration stores its **name**, never its value.
+
+Example `provider.json`:
+
+```json
+{
+  "provider": "openai-compatible",
+  "model": "YOUR_MODEL_ID",
+  "base_url": "https://YOUR_PROVIDER/API_BASE",
+  "api_key_env": "MY_PROVIDER_API_KEY",
+  "max_output_tokens": 128,
+  "output_token_parameter": "max_tokens",
+  "parameters": {},
+  "requests_per_minute": 24
+}
+```
+
+The chat adapter appends `/chat/completions` exactly; it does not insert `/v1`. Omitting `base_url` uses `https://api.openai.com/v1`. Use `max_completion_tokens` as `output_token_parameter` when required by the selected model. For Gemini, set `provider` to `gemini`, omit `base_url` and `output_token_parameter`, and use `api_key_env: "GEMINI_API_KEY"`; the default endpoint is `https://generativelanguage.googleapis.com/v1beta/models/MODEL_ID:generateContent` with `maxOutputTokens`.
+
+`parameters` accepts supported provider-native generation settings, such as temperature, sampling seed or reasoning controls. None are set implicitly; defaults can be stochastic. The CLI's `--seed` controls evaluation uncertainty, not hosted generation. Each request contains the unchanged benchmark prompt in one user message without a system message. Multiple candidates, streaming, prompt replacements, tools and forced output schemas are rejected.
+
+| Optional configuration | Default / meaning |
+| --- | --- |
+| `timeout_seconds` | 45 |
+| `max_retries`, `retry_backoff_seconds` | 2 temporary-429 retries; 15-second fallback delay, bounded at 60 seconds |
+| `expected_response_model` | Optional exact returned-model/version check |
+| `prices` | Optional `input`, `output`, `cached_input` USD per million tokens |
+| `pricing_source`, `pricing_date` | Optional price provenance |
+
+Preview one task or a bilingual suite:
+
+```sh
+fair-uk-eval run-api --task warbias_uk --config provider.json \
+  --output results/my-model/warbias_uk
+fair-uk-eval suite --benchmarks warbias warbias_intersectional --languages uk en \
+  --model api --api-config provider.json --output results/my-model
+```
+
+Add `--execute` to make requests. A single-task preview loads pinned data and may download it from HF; `--input` accepts a checksum-verified local copy. Suite preview does not download data. Missing prices mean unavailable cost, not zero; estimates are neither hard spending caps nor token upper bounds and exclude unrecorded failed-request charges.
+
+Hosted runs save immutable item responses under `responses/`, a source-ordered `predictions.jsonl`, and progress in `status.json`. Resume checks exact source rows, settings, requests and raw responses. A process lock prevents simultaneous writers. A `STOP` file stops before the next request; an in-flight request may finish and be saved.
+
+Only temporary HTTP 429s receive bounded retries. Authentication, daily quota and other errors stop. Transport errors and HTTP 5xx retain `inflight.json`, blocking automatic repetition of an uncertain request; resolve it using provider records before removing it. Malformed successful responses are preserved and stop scoring. Explicit empty answers, refusals and truncations remain scored outcomes with diagnostics. Gemini thought parts are excluded from visible answers. Unknown usage is left missing.
+
+Requested and returned model IDs, finish reasons and usage remain in reports. Hosted aliases are not independently verifiable weight snapshots; matching identifiers and seeds do not guarantee determinism. The adapter has mocked integration tests; each live provider/model configuration still needs validation.
+
+### Legacy pilot commands
+
+`run-openai` and `run-gemini` retain fixed pilot model lists and 16-token generation settings for reproduction; use their `--help` for accepted snapshots/options. Install `.[fair-uk-openai]` or `.[fair-uk-gemini]`, set `OPENAI_API_KEY` or `GEMINI_API_KEY` (`GOOGLE_API_KEY` fallback), and preview before executing:
+
+```sh
+fair-uk-eval run-openai --task warbias_uk --snapshot gpt-4.1-mini-2025-04-14 \
+  --limit-clusters-per-stratum 2 --output results/legacy-openai --dry-run
+fair-uk-eval run-gemini --task warbias_uk --snapshot gemini-3.6-flash \
+  --limit-clusters-per-stratum 2 --output results/legacy-gemini --dry-run
+```
+
+Removing `--dry-run` executes. `--max-estimated-usd` checks an estimate, not an account spending limit; `--concurrency` does not enforce requests per minute. These commands have their own checkpoint/retry behavior, without the generic runner's uncertainty markers or STOP handling. Saved predictions and report hashes use source order. Their original code/settings manifests cannot be silently changed on resume.
+
+## Bilingual data
+
+WarBias UK/EN tasks are public. The other four English tasks require an **unpublished local bundle**, adding `bbq_en`, `stereoset_en`, `winobias_en_natural` and `winobias_en_controlled`, alongside their matching Ukrainian inputs. This gives twelve tasks and six matched comparisons; requesting missing counterparts without a bundle blocks execution.
+
+| Family | Ukrainian rows | Matched English rows | Exclusions |
+| --- | ---: | ---: | --- |
+| BBQ | 58,492 | 58,492 | None within the pinned release |
+| StereoSet | 949 | 949 | Other original English items are outside this matched subset |
+| WinoBias Natural | 1,674 | 558 | 1,116 UK agreement/cross controls have no original EN counterpart |
+| WinoBias Controlled | 1,580 | 1,580 | None within the pinned test split |
+
+Reconstruct a bundle from the existing project source package:
+
+```sh
+python -m lm_eval.fair_uk.bilingual \
+  --source-root /path/to/fairForget --output /path/to/new-empty-bundle
+fair-uk-eval suite --languages uk en \
+  --dataset-bundle /path/to/new-empty-bundle/manifest.json
+```
+
+The source root must preserve the layout in [`bilingual.py`](../lm_eval/fair_uk/bilingual.py): pinned Ukrainian exports, original BBQ/StereoSet sources and source-commit records, and existing WinoBias source/construction records. **This repository alone cannot reconstruct the bundle** until those dependencies or a reviewed bundle are distributed. Preparation performs no inference, translation or downloads and reads no provider credentials.
+
+Preparation matches BBQ category/example IDs and answer metadata, StereoSet original IDs and semantic candidate labels, and WinoBias split/type/line IDs with construction lineage. Both languages retain common scoring/grouping metadata. WinoBias removes gold antecedent brackets; Controlled marks only the queried pronoun. Canonical occupation labels avoid a gold-option formatting cue. Mechanical alignment does not establish translation validity.
+
+The manifest records source/output/pair-map hashes, available source revisions and preparation-code identity; local revisions use `local-sha256:`. Loading verifies hashes, eligible IDs and documented exclusions. Full-language reports retain all UK rows, while paired reports exclude only declared unpaired rows. StereoSet retains the same 79 target groups across languages.
+
+WinoBias Natural's primary variants include Ukrainian grammatical agreement; Controlled uses Ukrainian neutral occupation paraphrases against original English occupation wording. Differences therefore combine language and adaptation. These candidate-selection tasks do not reproduce original coreference F1. English subset scores must not be presented as full original benchmark results.
 
 ## Outputs and rescoring
 
-A run writes:
+| Artifact | Contents |
+| --- | --- |
+| `run.json` | Dataset/model/code fingerprints, settings, selected IDs and runtime versions |
+| `predictions.jsonl` | Raw generated answers or mean candidate-token scores |
+| `records.jsonl` | Semantic item outcomes, source cases, groups and conditions |
+| `report.json`, `report.md` | Native metrics, group rates/support, worst groups, gaps, ratios and intervals |
+| `groups.csv` | Group rates, numerators, denominators and source-case counts |
 
-- `run.json`: dataset/model fingerprints, toolkit and harness-interface source hashes, protocol, batch size, selected IDs and runtime versions.
-- `predictions.jsonl`: generated text or candidate mean log probabilities, with token counts for likelihood requests.
-- `records.jsonl`: semantic per-item results with source-case, grouping and condition metadata.
-- `report.json`: native scores, all subgroup rates/counts, pooled and group-macro summaries, worst-group statistics and exploratory 95% intervals.
-- `report.md`: native-score and worst-group tables with intervals and coverage.
-- `groups.csv`: all subgroup rates, numerators, denominators and source-case counts.
-
-Recalculate a report without loading a model:
-
-```sh
-fair-uk-eval score \
-  --task warbias_intersectional_uk \
-  --predictions results/warbias_intersectional_uk/predictions.jsonl \
-  --bootstrap 2000 --seed 42 \
-  --output results/warbias_intersectional_uk_rescored
-```
-
-For a limited run, repeat the same `--limit-clusters-per-stratum` setting when rescoring. Missing, duplicate and unexpected prediction IDs are errors. External prediction files are identified by checksum; the scorer does not independently certify their model identity.
-
-WarBias external records use `{"id": "...", "response": "A"}`. Only A/B/C after trimming whitespace and uppercasing is accepted. Extra explanations, punctuation, refusals and Cyrillic lookalike letters are invalid, not unknown answers.
-
-Likelihood records use `{"id": "...", "scores": [...]}`. These are **mean scored-token log probabilities**, not probabilities or summed sentence likelihoods. BBQ requires nine values ordered by cyclic display order `(0,1,2)`, `(1,2,0)`, `(2,0,1)`, then A/B/C within each order. WinoBias requires A/B scores; StereoSet requires stereotype/anti-stereotype/unrelated scores. All values must be finite. Tied QA candidates split selection mass; StereoSet preserves the reference strict-greater-than comparisons and separately reports ties.
-
-## Paired WarBias UK–EN comparisons
-
-Run the corresponding UK and EN tasks with the same pinned model, code, backend, runtime, batch size, seed and model arguments, and the same case-limit setting if using a smoke subset. Then compare their output directories:
+Rescore without loading a model, writing to a new directory:
 
 ```sh
-fair-uk-eval compare \
-  --uk-run results/warbias_intersectional_uk \
-  --en-run results/warbias_intersectional_en \
-  --bootstrap 2000 --seed 42 \
-  --output results/warbias_intersectional_paired
+fair-uk-eval score --task warbias_uk \
+  --predictions results/my-model/warbias_uk/predictions.jsonl \
+  --bootstrap 2000 --seed 42 --output results/rescored-warbias-uk
 ```
 
-The base tasks can be compared in the same way. `--uk-input` and `--en-input` optionally provide checksum-verified local copies of their registered data. The comparison reloads the pinned sources and scores raw predictions; it does not trust cached `records.jsonl` values. It rejects missing or duplicate IDs, different case selections, mismatched answer/group/condition metadata, base/intersectional mixing, and mismatched model identities or run settings. External `score` reports do not certify model identity and cannot replace fingerprinted `run` directories.
+Repeat the source-case limit and `--dataset-bundle` when applicable. Missing, duplicate or unexpected IDs fail. External predictions are fingerprinted but their model identity is unverified; they cannot replace fingerprinted run directories in paired comparisons.
 
-`comparison.json` and `comparison.md` report **EN minus UK** rates by condition and group, plus differences between language-specific worst-group rates. Positive means a higher English rate; whether that is better depends on whether the rate measures success or harm. The worst group can change between languages. The bootstrap resamples each source case once per draw within status, retaining both languages, all profiles and both polarities, and recomputes extrema. Exact pairing prevents treating translations as independent samples; it does not remove translation or tokenization confounds or establish a causal language effect.
+WarBias records use `{"id":"...","response":"A"}`. Default `abc_option_text_v2` accepts ASCII A/B/C (case/whitespace insensitive), one trailing `.`, `!` or `)`, exact unique option text, or a letter plus `.`, `)` or `:` followed by its matching option. Text normalization covers Unicode composition and whitespace only. Explanations, contradictory labels/text and Cyrillic lookalikes remain invalid. Semantic accuracy and bare-letter format compliance are separate. Use `--answer-policy strict_abc_v1` to reproduce original bare-letter scoring; the generation prompt stays unchanged.
+
+Likelihood records use `{"id":"...","scores":[...]}` with finite **mean scored-token log probabilities**. BBQ expects nine values: cyclic orders `(0,1,2)`, `(1,2,0)`, `(2,0,1)`, then A/B/C within each. WinoBias expects A/B; StereoSet expects stereotype/anti-stereotype/unrelated. Ties and aggregation are defined in the [metrics reference](worst-group-metrics.md).
+
+## Paired language comparisons
+
+Use the same pinned model, code, backend, runtime, generation settings, batch size, seed and case selection in both languages. A bilingual suite creates comparisons automatically; to compare existing runs:
+
+```sh
+fair-uk-eval compare --uk-run results/my-model/warbias_uk \
+  --en-run results/my-model/warbias_en --bootstrap 2000 --seed 42 \
+  --output results/warbias-paired
+```
+
+Add `--dataset-bundle` for prepared counterparts. `--uk-input`/`--en-input` accept local pinned sources. Comparison reloads sources and rescores raw predictions under one answer policy; it checks matching IDs, semantic metadata, model identities/settings and known returned hosted versions. Missing version evidence remains explicit.
+
+`comparison.json`/`comparison.md` report **EN minus UK** native scores and group rates, with paired source-case intervals. Nonlinear scores and each language's worst group are recomputed in every draw. Positive means higher English values; improvement depends on the metric. Exact pairing preserves dependence, but does not remove translation/adaptation confounds or establish a causal language effect.
 
 ## Experiment tables
 
 ```sh
-fair-uk-eval summarize \
-  --reports results/warbias_intersectional_uk/report.json \
-            results/warbias_intersectional_en/report.json \
-            results/bbq_uk/report.json \
-  --output results/experiment_summary
+fair-uk-eval summarize --reports results/my-model/warbias_uk/report.json \
+  results/my-model/warbias_en/report.json --output results/summary
 ```
 
-This produces `summary.md`, `summary.json`, `coverage.csv`, `native.csv` and `worst_groups.csv`. Each task, protocol, language and model remains separate. Native metrics retain their original units; worst-group comparisons use rates in [0, 1]. Run identifiers distinguish revisions or settings that share a model name. Input report checksums and full report contents remain in the summary JSON. Duplicate experiment identities are rejected; these tables do not calculate paired between-model significance or a cross-benchmark fairness score.
-
-## Metrics and grouping
-
-For the same nonnegative rate across registered groups, the tool reports absolute worst-group harm (maximum) or success (minimum), the best–worst gap, and `minimum / maximum`. A ratio of one can coexist with uniformly high harm. A zero/zero ratio is undefined. Signed BBQ bias scores and raw StereoSet preference scores are not fed into this parity ratio.
-
-WarBias reports ambiguous stereotype, counter-stereotype, unknown and invalid rates separately; they sum to one. It reports accuracy by evidence condition, stereotype errors under conflicting evidence, and the aligned-minus-conflicting accuracy difference within each group. The intersectional report also summarizes status over the five profiles shared by both statuses. The additional IDP older-women cell remains visible separately in the full cell report; older women veterans remain an explicit design exclusion.
-
-Both people in an intersectional WarBias item share the same gender and age. The report measures status associations across those profiles, not a direct within-item preference for one gender or age. Age anchors 25/45/65 do not represent entire age ranges. Different source-case composition limits veteran–IDP comparisons.
-
-BBQ native scores use only rows with `bias_score_eligible`, including native accuracy; general accuracy comparisons additionally retain all rows. Its released `target_loc` already defines the scoring target and must not be flipped a second time for positive questions. The reference zero-non-unknown convention is recorded explicitly. BBQ groups are **bias categories**, not inferred demographic intersections.
-
-WinoBias separates pro/anti conditions, types and primary/agreement/cross controls, and reports paired correctness and signed/absolute gaps. Its groups denote grammatical gender. StereoSet retains target-macro SS/LMS/ICAT and reports maximum target SS distance from 50, with group comparisons for LMS. Lexical target disparities are not claimed to be demographic fairness.
-
-## Uncertainty and limits
-
-Within each subgroup, the comparison rate gives every source case equal weight after averaging its eligible variants. Row-level numerators, denominators and pooled rates remain visible. WarBias clusters by `source_case_id`; BBQ conservatively clusters by category/question-template index; WinoBias by split/type/item; StereoSet by original item ID, stratified by lexical target.
-
-The bootstrap resamples whole source cases within source strata, preserving shared profile panels, and recomputes extrema in every replicate. All group rates and eligible-case counts are reported. Missing registered groups are explicit; no all-group interval is emitted when a registered group has fewer than two source cases. The JSON includes the number of usable bootstrap replicates, including the ratio's valid denominator count.
-
-Intervals are **exploratory percentile intervals**, not simultaneous-coverage guarantees or evidence of population-wide fairness. Zero-event data can yield degenerate zero-width intervals. More samples, metric-coverage simulations and human validation are needed before making stronger claims. The `compare` command adds paired UK–EN intervals for one matching model. Paired between-model confidence intervals are not implemented. Languages and benchmark families are never pooled into one fairness score.
+Outputs are `summary.md`, `summary.json`, `coverage.csv`, `native.csv` and `worst_groups.csv`; suites create these automatically. Tasks, languages, models, protocols and metric units stay separate. Source report checksums are retained; duplicate experiment identities fail. No cross-benchmark composite or paired between-model significance test is calculated.
 
 ## Validation and attribution
 
-Run `pytest tests/fair_uk`. A [GitHub Actions template](fair-uk-ci.yml) is included; CI is not enabled because the publishing credential lacks GitHub workflow permission. An authorized maintainer can install it as `.github/workflows/fair-uk-tests.yml`. Regression tests cover strict parsing, polarity, answer-order mapping, ties, unsupported groups, zero denominators, hidden intersectional disparities, source-case weighting, clustered extrema and token boundaries.
+Run `pytest tests/fair_uk -q` for offline formula, CLI, checkpoint and tiny local-model integration checks. Live provider configurations, GPU/vLLM execution, human data validation and confirmatory interval coverage remain unverified. The [CI template](fair-uk-ci.yml) is supplied but not installed as a workflow.
 
-During implementation, all eight registered configurations passed checksum and structure checks. Native scoring was compared with the project reference evaluators on 100 BBQ rows, all 949 StereoSet items and 12 WinoBias Natural rows using constructed scores. A tiny random local causal model exercised generation and all four likelihood adapters. Those are software checks, not meaningful model fairness results. A substantive model case study and human benchmark validation remain future work.
-
-Software retains the upstream MIT license. Dataset text is downloaded from its original HF repository and retains its separate license: WarBias and StereoSet-UK Eval CC BY-SA 4.0, BBQ-UK CC BY 4.0, and WinoBias-UK MIT. No annotation workbook is bundled. The native score definitions follow the Ukrainian reference implementations in the sibling project, and the worst-case comparison adaptation is documented in [worst-group-metrics.md](worst-group-metrics.md), based on [Ghosh et al.](https://proceedings.mlr.press/v142/ghosh21a.html).
+Software retains the upstream MIT license. Dataset licenses are separate: WarBias and StereoSet-UK Eval CC BY-SA 4.0, BBQ-UK CC BY 4.0, WinoBias-UK MIT. Bundle sources retain their provenance and license obligations. See the [metrics reference](worst-group-metrics.md) for formula attribution and interpretation limits.

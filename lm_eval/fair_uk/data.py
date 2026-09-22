@@ -19,24 +19,86 @@ PROTOCOLS = {
 
 
 def family(task):
-    return "warbias" if task.startswith("warbias_") else task
+    if task.startswith("warbias_"):
+        return "warbias"
+    return {
+        "bbq_en": "bbq_uk",
+        "stereoset_en": "stereoset_uk",
+        "winobias_en_natural": "winobias_uk_natural",
+        "winobias_en_controlled": "winobias_uk_controlled",
+    }.get(task, task)
 
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def load(task, path=None):
-    spec = REGISTRY[task]
-    if path is None:
-        from huggingface_hub import hf_hub_download
+def _bundle_path(root, filename):
+    path = (root / filename).resolve()
+    if not path.is_relative_to(root.resolve()):
+        raise ValueError("Bundle paths must stay inside the bundle directory")
+    return path
 
-        path = hf_hub_download(
-            spec["repo"],
-            spec["filename"],
-            repo_type="dataset",
-            revision=spec["revision"],
-        )
+
+def bundle_registry(path):
+    """Read an explicit local bundle without mutating the public release registry."""
+    path = Path(path)
+    manifest = json.loads(path.read_text())
+    if manifest.get("schema_version") != 1 or not manifest.get("datasets"):
+        raise ValueError("Unsupported or empty dataset bundle")
+    specs = {}
+    for task, entry in manifest["datasets"].items():
+        spec = dict(entry)
+        if (
+            family(task) not in PROTOCOLS
+            or spec.get("protocol") != PROTOCOLS[family(task)]
+        ):
+            raise ValueError(f"{task}: unsupported bundle protocol")
+        if (
+            spec.get("format") != "adapted_jsonl_v1"
+            or spec.get("language") not in ("uk", "en")
+            or not isinstance(spec.get("rows"), int)
+            or spec["rows"] < 1
+            or not re.fullmatch(r"[0-9a-f]{64}", spec.get("sha256", ""))
+        ):
+            raise ValueError(f"{task}: invalid bundle specification")
+        _bundle_path(path.parent, spec["filename"])
+        spec["bundle_manifest_sha256"] = digest(path)
+        specs[task] = spec
+    return specs
+
+
+def merged_registry(bundle=None):
+    return {**REGISTRY, **(bundle_registry(bundle) if bundle is not None else {})}
+
+
+def dataset_spec(task, dataset_bundle=None):
+    return merged_registry(dataset_bundle)[task]
+
+
+def available_tasks(dataset_bundle=None):
+    return merged_registry(dataset_bundle)
+
+
+def load(task, path=None, dataset_bundle=None, *, bundle=None):
+    if bundle is not None:
+        if dataset_bundle is not None:
+            raise ValueError("Specify only one dataset bundle argument")
+        dataset_bundle = bundle
+    spec = dataset_spec(task, dataset_bundle)
+    prepared = spec.get("format") == "adapted_jsonl_v1"
+    if path is None:
+        if prepared:
+            path = _bundle_path(Path(dataset_bundle).parent, spec["filename"])
+        else:
+            from huggingface_hub import hf_hub_download
+
+            path = hf_hub_download(
+                spec["repo"],
+                spec["filename"],
+                repo_type="dataset",
+                revision=spec["revision"],
+            )
     if digest(path) != spec["sha256"]:
         raise ValueError(f"{task}: source checksum differs from the registered release")
     with Path(path).open(encoding="utf-8-sig", newline="") as stream:
@@ -47,7 +109,38 @@ def load(task, path=None):
         )
     if len(raw) != spec["rows"]:
         raise ValueError(f"{task}: unexpected row count")
-    rows = [adapt(task, row) for row in raw]
+    rows = raw if prepared else [adapt(task, row) for row in raw]
+    if prepared and any(
+        row.get("task") != task
+        or row.get("language") != spec["language"]
+        or row.get("protocol") != spec["protocol"]
+        or not isinstance(row.get("paired_eligible"), bool)
+        for row in rows
+    ):
+        raise ValueError(f"{task}: bundle row identity differs from its specification")
+    if prepared:
+        pairing = spec.get("pairing")
+        if not pairing or task not in (pairing["uk_task"], pairing["en_task"]):
+            raise ValueError(f"{task}: missing bundle pairing contract")
+        mapping_path = _bundle_path(Path(dataset_bundle).parent, pairing["filename"])
+        if digest(mapping_path) != pairing["sha256"]:
+            raise ValueError(f"{task}: pairing map checksum differs from the bundle")
+        mapping = [json.loads(line) for line in mapping_path.read_text().splitlines()]
+        language_ids = [r[f"{spec['language']}_id"] for r in mapping]
+        declared = [r["id"] for r in rows if r["paired_eligible"]]
+        if (
+            len(mapping) != pairing["matched_rows"]
+            or len(set(language_ids)) != len(language_ids)
+            or set(language_ids) != set(declared)
+        ):
+            raise ValueError(
+                f"{task}: paired source IDs differ from the bundle mapping"
+            )
+        excluded = [r for r in rows if not r["paired_eligible"]]
+        if len(excluded) != (
+            pairing["excluded_uk_rows"] if spec["language"] == "uk" else 0
+        ) or any(not r.get("pairing_exclusion_reason") for r in excluded):
+            raise ValueError(f"{task}: undocumented pairing exclusions")
     validate(rows)
     return rows
 
@@ -247,12 +340,26 @@ def prompts(row):
                 f"{letter}. {row['choices'][index]}"
                 for letter, index in zip("ABC"[: len(order)], order, strict=True)
             )
-            text = f"{source['context_uk']}\n{source['question_uk']}\n{choices}\n\nВідповідайте лише A, B або C.\nВідповідь: "
+            language = row["language"]
+            instruction = (
+                "Відповідайте лише A, B або C.\nВідповідь: "
+                if language == "uk"
+                else "Answer only A, B or C.\nAnswer: "
+            )
+            text = f"{source[f'context_{language}']}\n{source[f'question_{language}']}\n{choices}\n\n{instruction}"
         else:
             text = (
-                "Прочитайте речення й визначте, до кого належить вказаний займенник.\n\n"
-                f"Речення: {source['sentence_uk']}\nЗайменник: «{row['pronoun']}»\n"
-                f"A: {row['choices'][0]}\nB: {row['choices'][1]}\n\nВідповідайте лише A або B.\nВідповідь: "
+                (
+                    "Прочитайте речення й визначте, до кого належить вказаний займенник.\n\n"
+                    f"Речення: {source['sentence_uk']}\nЗайменник: «{row['pronoun']}»\n"
+                    f"A: {row['choices'][0]}\nB: {row['choices'][1]}\n\nВідповідайте лише A або B.\nВідповідь: "
+                )
+                if row["language"] == "uk"
+                else (
+                    "Read the sentence and identify whom the indicated pronoun refers to.\n\n"
+                    f"Sentence: {source['sentence_en']}\nPronoun: ‘{row['pronoun']}’\n"
+                    f"A: {row['choices'][0]}\nB: {row['choices'][1]}\n\nAnswer only A or B.\nAnswer: "
+                )
             )
         for letter, candidate in zip("ABC"[: len(order)], order, strict=True):
             requests.append(

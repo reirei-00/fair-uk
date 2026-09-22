@@ -4,6 +4,8 @@ import csv
 import hashlib
 import json
 
+from lm_eval.fair_uk.metric_specs import metric_catalog
+
 
 def fmt(value):
     if value is None:
@@ -31,31 +33,43 @@ def table(headers, rows):
 def model_label(report):
     identity = report["provenance"].get("model_identity")
     if isinstance(identity, dict):
-        return identity.get("repository") or identity.get("parameters", {}).get(
-            "pretrained", "local checkpoint"
+        return (
+            identity.get("repository")
+            or identity.get("model_snapshot")
+            or identity.get("parameters", {}).get("pretrained", "local checkpoint")
         )
     return "external predictions (model unverified)"
 
 
 def native_entries(report):
+    specs = {m["id"]: m for m in metric_catalog(report["task"])["metrics"]}
+    counts = {
+        "n",
+        "source_cases",
+        "targets",
+        "categories",
+        "primary_pairs",
+        "strata",
+        "bias_eligible_rows",
+    }
     for record in report["native"]:
         scope = " / ".join(
             str(record[k])
-            for k in ("scope", "stratum", "condition", "status", "group")
+            for k in ("scope", "stratum", "condition", "status", "category", "group")
             if k in record
         )
         for metric, value in record.items():
-            if isinstance(value, (float, int)) and not isinstance(value, bool):
-                # The native adapters retain their reference score scales.
-                unit = (
-                    "rate"
-                    if report["task"].startswith("warbias_")
-                    else "percent / percentage points"
-                )
-                if metric in ("n", "source_cases", "non_unknown_mass"):
-                    unit = "count / selection mass"
-                elif metric.endswith("tie_rate"):
-                    unit = "rate"
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (float, int)) or (value is None and metric in specs):
+                # Definitions determine each score's units; signed gaps and
+                # rate-valued diagnostics must not be mislabeled as percentages.
+                if metric in counts:
+                    unit = "count"
+                elif metric == "non_unknown_mass":
+                    unit = "selection_mass"
+                else:
+                    unit = specs.get(metric, {}).get("unit", "unspecified")
                 yield scope, metric, value, unit
 
 
@@ -67,11 +81,22 @@ def markdown(report):
         "",
         f"**Pilot, human-unvalidated.** {report['rows']} rows; {report['source_cases']} source cases. Partial run: {report['partial_run']}.",
         "",
-        "Native scores retain their benchmark-specific scales. Group comparisons use equal source-case weights within each group.",
+        "## Dataset-specific metrics",
         "",
-        table(["Native scope", "Metric", "Value", "Unit"], native_entries(report)),
+        "Benchmark metrics retain their own scales and denominators. The versioned metric catalog in `report.json` defines each score, direction and adaptation.",
+        "",
+        metric_catalog(report["task"])["protocol_note"],
+        "",
+        table(["Benchmark scope", "Metric", "Value", "Unit"], native_entries(report)),
         "",
     ]
+    if "scoring_policy" in report:
+        diagnostics = report["answer_diagnostics"]
+        lines[4:4] = [
+            f"Answer scoring: `{report['scoring_policy']}`. Strict-format accuracy: {fmt(diagnostics['strict_accuracy'])}; format-violation rate: {fmt(diagnostics['format_violation_rate'])}.",
+            "Formatting diagnostics are separate from semantic invalid answers and fairness outcomes.",
+            "",
+        ]
     rows = []
     for c in report["comparisons"]:
         scope = " / ".join(
@@ -92,6 +117,10 @@ def markdown(report):
             )
         )
     lines += [
+        "## Additional subgroup and worst-group analysis",
+        "",
+        "These comparisons use equal source-case weights within each group and bounded per-item rates. They supplement the dataset-specific metrics above.",
+        "",
         table(
             [
                 "Scope",
@@ -153,7 +182,11 @@ def paired_markdown(report):
         for group, value in c["groups"].items():
             rows.append(
                 (
-                    c["condition"],
+                    " / ".join(
+                        str(c[k])
+                        for k in ("condition", "stratum", "score_group")
+                        if c.get(k) is not None
+                    ),
                     c["metric"],
                     group,
                     value["source_cases"],
@@ -165,7 +198,11 @@ def paired_markdown(report):
             )
     worst = [
         (
-            c["condition"],
+            " / ".join(
+                str(c[k])
+                for k in ("condition", "stratum", "score_group")
+                if c.get(k) is not None
+            ),
             c["metric"],
             c["worst_available"]["uk"],
             c["worst_available"]["en"],
@@ -176,15 +213,47 @@ def paired_markdown(report):
     ]
     return "\n".join(
         [
-            "# Fair-UK — paired WarBias language comparison",
+            "# Fair-UK — paired benchmark language comparison",
             "",
-            f"**EN minus UK**, in rate units. {report['paired_rows']} matched items; {report['source_cases']} source cases. Partial run: {report['partial_run']}.",
+            f"**EN minus UK**. {report['paired_rows']} matched items; {report['source_cases']} source cases. Partial run: {report['partial_run']}. Dataset-specific scores retain their own units; additional group comparisons use rates.",
+            "",
+            f"Answer scoring: `{report.get('scoring_policy', 'legacy / unspecified')}`. Both languages are rescored under this policy.",
             "",
             "Positive deltas mean a higher English rate; improvement depends on the metric. Worst groups can differ between languages. Their extrema are recomputed in each paired bootstrap replicate.",
             "",
+            "## Dataset-specific metric comparisons",
+            "",
             table(
                 [
-                    "Condition",
+                    "Scope",
+                    "Metric",
+                    "Unit",
+                    "UK",
+                    "EN",
+                    "Delta",
+                    "95% interval",
+                    "Valid draws",
+                ],
+                [
+                    (
+                        r["scope"],
+                        r["metric"],
+                        r["unit"],
+                        r["uk"],
+                        r["en"],
+                        r["delta_en_minus_uk"],
+                        r["ci95"],
+                        r["bootstrap_valid_replicates"],
+                    )
+                    for r in report.get("native_comparisons", [])
+                ],
+            ),
+            "",
+            "## Additional group comparisons",
+            "",
+            table(
+                [
+                    "Scope",
                     "Metric",
                     "Worst UK",
                     "Worst EN",
@@ -196,7 +265,7 @@ def paired_markdown(report):
             "",
             table(
                 [
-                    "Condition",
+                    "Scope",
                     "Metric",
                     "Group",
                     "Cases",
@@ -207,6 +276,13 @@ def paired_markdown(report):
                 ],
                 rows,
             ),
+            "",
+            "Model-version evidence: "
+            + fmt(report.get("model_version_comparison", {})),
+            "",
+            "Coverage: " + fmt(report.get("coverage", {})),
+            "",
+            "Pairing and adaptation notes: " + fmt(report.get("pairing_notes", {})),
             "",
             report["bootstrap"]["limitations"],
             "",
@@ -222,7 +298,15 @@ def summarize(paths, output):
     for path in paths:
         report = json.loads(path.read_text())
         provenance = report["provenance"]
-        key = json.dumps(provenance, sort_keys=True)
+        scoring_policy = report.get("scoring_policy", "legacy / unspecified")
+        key = json.dumps(
+            {
+                "generation": provenance,
+                "scoring_policy": scoring_policy,
+                "scorer_code_identity": report.get("scorer_code_identity"),
+            },
+            sort_keys=True,
+        )
         if key in seen:
             raise ValueError("Duplicate experiment identity; select one report per run")
         seen.add(key)
@@ -239,6 +323,7 @@ def summarize(paths, output):
             "task": report["task"],
             "language": report["language"],
             "protocol": report["protocol"],
+            "scoring_policy": scoring_policy,
             "dataset_revision": provenance["dataset"]["revision"],
             "partial_run": report["partial_run"],
         }
@@ -303,13 +388,23 @@ def summarize(paths, output):
                 "WarBias UK/EN form the core study; the other benchmarks provide complementary measurements. Each task, language, model and protocol is reported separately. No cross-benchmark composite is calculated.",
                 "",
                 table(
-                    ["Model", "Run", "Task", "Language", "Rows", "Cases", "Partial"],
+                    [
+                        "Model",
+                        "Run",
+                        "Task",
+                        "Language",
+                        "Answer policy",
+                        "Rows",
+                        "Cases",
+                        "Partial",
+                    ],
                     [
                         (
                             r["model"],
                             r["run_id"],
                             r["task"],
                             r["language"],
+                            r["scoring_policy"],
                             r["rows"],
                             r["source_cases"],
                             r["partial_run"],
@@ -318,8 +413,18 @@ def summarize(paths, output):
                     ],
                 ),
                 "",
+                "## Dataset-specific metrics",
+                "",
                 table(
-                    ["Model", "Run", "Task", "Scope", "Native metric", "Value", "Unit"],
+                    [
+                        "Model",
+                        "Run",
+                        "Task",
+                        "Scope",
+                        "Benchmark metric",
+                        "Value",
+                        "Unit",
+                    ],
                     [
                         (
                             r["model"],
@@ -333,6 +438,8 @@ def summarize(paths, output):
                         for r in native
                     ],
                 ),
+                "",
+                "## Additional subgroup and worst-group analysis",
                 "",
                 table(
                     [

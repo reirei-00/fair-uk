@@ -63,6 +63,7 @@ def test_alignment_rejects_different_cases_keys_and_tracks():
         ("cluster", "different"),
         ("gold", 1),
         ("task", "warbias_intersectional_en"),
+        ("scoring_policy", "different"),
     ):
         changed = copy.deepcopy(other)
         changed[key] = value
@@ -75,8 +76,8 @@ def test_alignment_rejects_different_cases_keys_and_tracks():
 def test_native_units_remain_benchmark_specific():
     assert list(
         native_entries({"task": "warbias_uk", "native": [{"accuracy": 0.5, "n": 20}]})
-    ) == [("", "accuracy", 0.5, "rate"), ("", "n", 20, "count / selection mass")]
+    ) == [("", "accuracy", 0.5, "rate"), ("", "n", 20, "count")]
     assert (
         next(native_entries({"task": "stereoset_uk", "native": [{"ss": 50.0}]}))[-1]
-        == "percent / percentage points"
+        == "percent"
     )
