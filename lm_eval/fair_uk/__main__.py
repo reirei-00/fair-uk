@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import sys
 from pathlib import Path
 
 from lm_eval.fair_uk import VERSION
@@ -16,6 +17,7 @@ from lm_eval.fair_uk.reporting import (
     markdown,
     paired_markdown,
     summarize,
+    table,
     write_csv,
 )
 
@@ -27,9 +29,17 @@ def write_json(path, value):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "suite":
+        from lm_eval.fair_uk.suite import main as suite_main
+
+        return suite_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("list", help="List pinned benchmark tasks")
+    commands.add_parser("suite", help="Plan or explicitly run a set of bias benchmarks")
+    listing = commands.add_parser("list", help="List pinned benchmark tasks")
+    listing.add_argument("--format", choices=("json", "table"), default="json")
+    listing.add_argument("--language", choices=("uk", "en"))
     for command in ("validate", "run", "score", "run-openai", "run-gemini"):
         sub = commands.add_parser(command)
         sub.add_argument("--task", choices=sorted(REGISTRY), required=True)
@@ -106,7 +116,34 @@ def main(argv=None):
         print(f"Comparison written to {args.output.resolve() / 'comparison.md'}")
         return
     if args.command == "list":
-        print(json.dumps(REGISTRY, indent=2))
+        selected = {
+            task: spec
+            for task, spec in REGISTRY.items()
+            if args.language is None or spec["language"] == args.language
+        }
+        if args.format == "table":
+            print(
+                table(
+                    ["Task", "Language", "Rows", "Scoring input", "HF dataset"],
+                    [
+                        (
+                            task,
+                            spec["language"],
+                            spec["rows"],
+                            "generated answer"
+                            if task.startswith("warbias_")
+                            else "token log probabilities",
+                            spec["repo"],
+                        )
+                        for task, spec in sorted(selected.items())
+                    ],
+                )
+            )
+            print(
+                "\nPinned pilot releases; human validation pending. Use --format json for revisions and checksums."
+            )
+        else:
+            print(json.dumps(selected, indent=2))
         return
     registry_rows = load(args.task, args.input)
     rows = select_clusters(registry_rows, args.limit_clusters_per_stratum)

@@ -19,11 +19,21 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[fair-uk]'
 
-fair-uk-eval list
+fair-uk-eval list --format table
 fair-uk-eval validate --task warbias_intersectional_uk
+fair-uk-eval suite
 ```
 
-These commands list the tasks and validate a pinned dataset without running a model. For model evaluation, start with the [run guide](docs/fair-uk.md#install-and-run).
+These commands list datasets, validate one pinned dataset and preview the six-task Ukrainian bias suite without running a model. To run the suite against a pinned Hugging Face causal model:
+
+```sh
+fair-uk-eval suite --execute \
+  --model hf \
+  --model-args 'pretrained=YOUR_MODEL,revision=IMMUTABLE_40_CHARACTER_COMMIT,device=cuda' \
+  --output results/my-model
+```
+
+Replace the model and revision placeholders. The default suite runs full Ukrainian datasets; use `--tasks` to select tasks or include the English WarBias counterparts. See [runner support and the suite guide](docs/benchmark-suite.md) for API limitations.
 
 ## Benchmarks
 
@@ -51,6 +61,7 @@ Benchmarks and languages retain separate scores. A parity ratio of one means equ
 
 | I want to… | Guide |
 | --- | --- |
+| List datasets or run the Ukrainian bias suite | [Suite and backend support](docs/benchmark-suite.md) |
 | Evaluate Gemini models on WarBias | [Gemini pilot guide](docs/gemini-warbias-pilot.md) |
 | Evaluate OpenAI models on WarBias | [OpenAI pilot guide](docs/openai-warbias-pilot.md) |
 | Run a model or rescore predictions | [Installation and usage](docs/fair-uk.md) |
