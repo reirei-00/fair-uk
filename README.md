@@ -1,16 +1,14 @@
 # Fair-UK
 
-**Fairness evaluation for language models, with reproducible benchmarks and worst-group reporting.**
+**Fairness evaluation for language models, built on EleutherAI's evaluation harness.**
 
-Fair-UK supports **WarBias**, a study of bias involving veterans and internally displaced people, including age and gender profiles. WarBias is evaluated in Ukrainian and English; BBQ-UK, StereoSet-UK and WinoBias-UK provide complementary measurements.
+Fair-UK supports the **WarBias** study of bias involving veterans and internally displaced people, including age and gender profiles. BBQ, StereoSet and WinoBias provide complementary measurements. Each benchmark reports its own metrics, supplemented by subgroup and worst-group comparisons.
 
-[Quick start](#quick-start) · [Benchmarks](#benchmarks) · [Metrics and reports](#metrics-and-reports) · [Documentation](#documentation)
-
-> **Pilot release.** The registered datasets are human-unvalidated. Results describe performance on these benchmark cases; they do not certify that a model is fair.
+> **Pilot:** datasets are human-unvalidated. Results describe these benchmark cases and do not certify that a model is fair.
 
 ## Quick start
 
-Requires Python 3.10 or newer. Install in a dedicated environment:
+Requires Python 3.10 or newer:
 
 ```sh
 git clone https://github.com/reirei-00/fair-uk.git
@@ -25,7 +23,7 @@ fair-uk-eval validate --task warbias_intersectional_uk
 fair-uk-eval suite
 ```
 
-These commands list datasets and metric definitions, validate one pinned dataset and preview the six-task Ukrainian bias suite without running a model. To run the suite against a pinned Hugging Face causal model:
+The last command previews the six-task Ukrainian suite without running a model. To execute against a compatible Hugging Face causal checkpoint, replace the placeholders:
 
 ```sh
 fair-uk-eval suite --execute \
@@ -34,48 +32,15 @@ fair-uk-eval suite --execute \
   --output results/my-model
 ```
 
-Replace the model and revision placeholders. The default suite runs full Ukrainian datasets. Select benchmark families with `--benchmarks` and languages with `--languages uk en`. WarBias English is registered; the other English counterparts use a verified local dataset bundle pending HF publication. See the [suite guide](docs/benchmark-suite.md) and [bilingual data audit](docs/bilingual-data-audit.md).
+Select benchmarks with `--benchmarks` and languages with `--languages uk en`. WarBias has registered Ukrainian and English tasks; the other English counterparts currently require a local dataset bundle. Hosted chat APIs support WarBias generation; the other protocols require candidate token scores.
 
-## Benchmarks
-
-| Benchmark | Language | Task names |
-| --- | --- | --- |
-| **WarBias — base** | Ukrainian, English | `warbias_uk`, `warbias_en` |
-| **WarBias — intersectional** | Ukrainian, English | `warbias_intersectional_uk`, `warbias_intersectional_en` |
-| BBQ-UK | Ukrainian | `bbq_uk` |
-| StereoSet-UK | Ukrainian | `stereoset_uk` |
-| WinoBias-UK Natural | Ukrainian | `winobias_uk_natural` |
-| WinoBias-UK Controlled | Ukrainian | `winobias_uk_controlled` |
-
-Each task has a pinned HF revision, file checksum and its own scoring protocol. See [dataset sizes and protocols](docs/fair-uk.md#registered-datasets-and-protocols).
-
-## Metrics and reports
-
-- **Native benchmark scores** alongside accuracy, stereotypical responses and invalid-answer rates where applicable. WarBias separates answer correctness from format compliance.
-- **Worst-group performance**, group gaps and min/max rate ratios, with group identities, case counts and exploratory source-case bootstrap intervals.
-- **Paired UK–EN comparisons** for all benchmark families with matched counterparts, keeping translations and demographic variants of each case together.
-- **Reproducible outputs:** raw predictions, model/data/code fingerprints, Markdown reports, JSON results and CSV tables. Completed predictions can be resumed or rescored.
-
-Benchmarks and languages retain separate scores. A parity ratio of one means equal measured rates; it can still accompany poor performance. See the [metric definitions and limitations](docs/worst-group-metrics.md).
+Runs produce raw predictions, native and group metrics, provenance, and JSON/Markdown/CSV reports. Matched bilingual runs also produce UK–EN comparisons. Benchmarks and languages keep separate scores.
 
 ## Documentation
 
-| I want to… | Guide |
-| --- | --- |
-| List datasets or run the Ukrainian bias suite | [Suite and backend support](docs/benchmark-suite.md) |
-| Configure a hosted model or API endpoint | [Generic hosted models](docs/hosted-models.md) |
-| Understand each dataset’s own metrics | [Metric specification](docs/metric-specification.md) |
-| Prepare matched English counterparts | [Bilingual data audit](docs/bilingual-data-audit.md) |
-| Evaluate Gemini models on WarBias | [Gemini pilot guide](docs/gemini-warbias-pilot.md) |
-| Evaluate OpenAI models on WarBias | [OpenAI pilot guide](docs/openai-warbias-pilot.md) |
-| Run a model or rescore predictions | [Installation and usage](docs/fair-uk.md) |
-| Compare Ukrainian and English results | [Paired language comparisons](docs/fair-uk.md#paired-warbias-uken-comparisons) |
-| Combine reports into model-by-task tables | [Experiment tables](docs/fair-uk.md#experiment-tables) |
-| Understand group metrics and uncertainty | [Worst-group comparisons](docs/worst-group-metrics.md) |
-| Check validation and release limitations | [Pilot release notes](docs/fair-uk-release.md) |
+- [Usage guide](docs/fair-uk.md): datasets, model configuration, bilingual preparation, resume, rescoring and comparisons.
+- [Metrics reference](docs/worst-group-metrics.md): each benchmark's definitions, group analysis and interpretation limits.
 
-## Built on EleutherAI's evaluation harness
+## Attribution
 
-Fair-UK extends the [Language Model Evaluation Harness](https://github.com/EleutherAI/lm-evaluation-harness), reusing its model backends. Use `fair-uk-eval` for this toolkit's protocols; the upstream `lm-eval` command is also available.
-
-General backend configuration and upstream features are covered in the [upstream README](https://github.com/EleutherAI/lm-evaluation-harness/blob/ad8737ae7fad24cf64e50fc7fc31397bff586b9e/README.md). Software retains the [MIT license and EleutherAI attribution](LICENSE.md); the [harness citation](CITATION.bib) is included. Datasets retain their [separate licenses and provenance](docs/fair-uk.md#validation-and-attribution).
+Fair-UK extends [EleutherAI's Language Model Evaluation Harness](https://github.com/EleutherAI/lm-evaluation-harness). Use `fair-uk-eval` for these protocols; upstream `lm-eval` remains available. See the [upstream README](https://github.com/EleutherAI/lm-evaluation-harness/blob/ad8737ae7fad24cf64e50fc7fc31397bff586b9e/README.md) for general harness features. Software retains the [MIT license](LICENSE.md) and [harness citation](CITATION.bib); datasets retain their own licenses, listed in the usage guide.
