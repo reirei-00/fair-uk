@@ -9,8 +9,6 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-import httpx
-
 from lm_eval.fair_uk.data import prompts
 from lm_eval.fair_uk.metrics import score_item
 from lm_eval.fair_uk.openai_runner import atomic_write
@@ -192,6 +190,8 @@ def run(
         raise ValueError("Pending-request preflight exceeds --max-estimated-usd")
     owns_client = pending and client is None
     if owns_client:
+        import httpx
+
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise ValueError("Configure GEMINI_API_KEY locally first")

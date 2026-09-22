@@ -1,4 +1,5 @@
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +17,13 @@ def test_registry_listing_and_language_filter(capsys):
     assert "warbias_en" in output and "warbias_intersectional_en" in output
     assert "bbq_uk" not in output
     assert "human validation pending" in output
+
+
+def test_listing_does_not_require_optional_gemini_client(monkeypatch, capsys):
+    monkeypatch.delitem(sys.modules, "lm_eval.fair_uk.gemini_runner", raising=False)
+    monkeypatch.setitem(sys.modules, "httpx", None)
+    main(["list"])
+    assert json.loads(capsys.readouterr().out) == REGISTRY
 
 
 def test_default_suite_is_offline_and_does_not_echo_credentials(
