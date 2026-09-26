@@ -65,7 +65,7 @@ def predict(backend, rows, max_output_tokens=128):
     if not isinstance(max_output_tokens, int) or max_output_tokens < 1:
         raise ValueError("Output token limit must be a positive integer")
     kind = family(rows[0]["task"])
-    if kind == "warbias":
+    if kind in ("warbias", "warbias_benign"):
         requests = [
             Instance(
                 "generate_until",
@@ -104,7 +104,9 @@ def predict(backend, rows, max_output_tokens=128):
         specs = prompts(row)
         counts.append(len(specs))
         for spec in specs:
-            encoded = encode_request(backend, spec, sentence=kind == "stereoset_uk")
+            encoded = encode_request(
+                backend, spec, sentence=kind in ("stereoset_uk", "warbias_triplets")
+            )
             requests.append(encoded)
             lengths.append(len(encoded[2]))
     outputs = backend._loglikelihood_tokens(requests)

@@ -17,6 +17,18 @@ BENCHMARKS = {
         "en": "winobias_en_controlled",
     },
 }
+DEFAULT_BENCHMARKS = tuple(BENCHMARKS)
+BENCHMARKS.update(
+    {
+        name: {language: f"{name}_{language}" for language in ("uk", "en")}
+        for name in (
+            "warbias_triplets",
+            "warbias_cross_actor",
+            "warbias_expanded_qa",
+            "warbias_benign",
+        )
+    }
+)
 
 
 def benchmark(task):
@@ -31,9 +43,13 @@ def task_metadata(task):
     return {
         "benchmark": benchmark(task),
         "protocol": PROTOCOLS[kind],
-        "required_capability": "generate_text" if kind == "warbias" else "score_tokens",
+        "required_capability": "generate_text"
+        if kind in ("warbias", "warbias_benign")
+        else "score_tokens",
         "requests_per_row": {
             "warbias": 1,
+            "warbias_triplets": 3,
+            "warbias_benign": 1,
             "bbq_uk": 9,
             "stereoset_uk": 3,
             "winobias_uk_natural": 2,
@@ -58,7 +74,7 @@ def resolve_tasks(registry, tasks=None, languages=None, benchmarks=None):
         names = benchmarks or (
             list(dict.fromkeys(benchmark(t) for t in tasks))
             if tasks
-            else list(BENCHMARKS)
+            else list(DEFAULT_BENCHMARKS)
         )
         if len(names) != len(set(names)):
             raise ValueError("Select each benchmark only once")

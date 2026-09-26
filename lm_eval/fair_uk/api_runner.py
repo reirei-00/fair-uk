@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
-from lm_eval.fair_uk.data import PROTOCOLS, prompts
+from lm_eval.fair_uk.data import PROTOCOLS, family, prompts
 from lm_eval.fair_uk.metrics import score_item
 
 
@@ -238,9 +238,13 @@ def normalize_config(config):
     return value
 
 
-def identity(config):
+def identity(config, protocol=PROTOCOLS["warbias"]):
     """Return provider-neutral model provenance, independent of token prices."""
     value = normalize_config(config)
+    if protocol not in (PROTOCOLS["warbias"], PROTOCOLS["warbias_benign"]):
+        raise ValueError(
+            "Unsupported hosted generation protocol; candidate log-likelihood requires a scoring backend"
+        )
     parameters = copy.deepcopy(value["parameters"])
     if value["provider"] == "gemini":
         model_path = quote(value["model"].removeprefix("models/"), safe="")
@@ -257,27 +261,30 @@ def identity(config):
         "endpoint": endpoint,
         "parameters": parameters,
         "capabilities": ["generate"],
-        "protocol": PROTOCOLS["warbias"],
+        "protocol": protocol,
         "expected_response_model": value.get("expected_response_model"),
         "message_format": "one user message containing the unchanged registered prompt; no system message",
         "reproducibility": "Provider identifiers may be mutable; raw returned model versions are recorded. Hosted weights cannot be independently hashed and determinism is not guaranteed.",
     }
 
 
-def _model(config_or_identity):
+def _model(config_or_identity, protocol=PROTOCOLS["warbias"]):
     if config_or_identity.get("adapter") == ADAPTER:
         return config_or_identity
-    return identity(config_or_identity)
+    return identity(config_or_identity, protocol)
 
 
 def request_payload(row, config_or_identity):
-    model = _model(config_or_identity)
+    model = _model(config_or_identity, row.get("protocol"))
     if (
-        not row["task"].startswith("warbias_")
-        or row.get("protocol") != PROTOCOLS["warbias"]
+        family(row["task"]) not in ("warbias", "warbias_benign")
+        or row.get("protocol")
+        not in (PROTOCOLS["warbias"], PROTOCOLS["warbias_benign"])
+        or row.get("protocol") != PROTOCOLS.get(family(row["task"]))
+        or row.get("protocol") != model["protocol"]
     ):
         raise ValueError(
-            "Hosted generation supports WarBias only; other current tasks require candidate log-likelihood"
+            "Hosted generation supports WarBias QA and benign requests; other current tasks require candidate log-likelihood"
         )
     prompt = prompts(row)[0]["context"]
     if model["provider"] == "gemini":
@@ -294,7 +301,7 @@ def request_payload(row, config_or_identity):
 
 def estimate(rows, config):
     """Return request counts and a rough cost estimate; no client is constructed."""
-    value, model = normalize_config(config), identity(config)
+    value, model = normalize_config(config), identity(config, rows[0]["protocol"])
     for row in rows:
         request_payload(row, model)
     tokens = sum(len(prompts(row)[0]["context"].encode("utf-8")) + 128 for row in rows)
@@ -460,7 +467,7 @@ def response_details(raw, config_or_identity):
 
 
 def validate_prediction(row, prediction, config_or_identity):
-    model = _model(config_or_identity)
+    model = _model(config_or_identity, row.get("protocol"))
     if prediction.get("id") != row["id"]:
         raise ValueError("Prediction ID does not match source row")
     if (
@@ -691,11 +698,11 @@ def run(rows, manifest, config, output, client=None):
     ``inflight.json`` marker. Resuming will not repeat that uncertain request.
     Known HTTP errors stop cleanly (only temporary 429s receive bounded retries).
     """
-    value, model = normalize_config(config), identity(config)
     rows = list(rows)
     by_id = {row["id"]: row for row in rows}
     if not rows or len(by_id) != len(rows):
         raise ValueError("Source rows must be nonempty with unique IDs")
+    value, model = normalize_config(config), identity(config, rows[0]["protocol"])
     for row in rows:
         request_payload(row, model)
     source_fingerprint = hashlib.sha256(

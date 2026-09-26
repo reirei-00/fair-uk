@@ -196,6 +196,51 @@ fair-uk-eval summarize --reports results/my-model/warbias_uk/report.json \
 
 Outputs are `summary.md`, `summary.json`, `coverage.csv`, `native.csv` and `worst_groups.csv`; suites create these automatically. Tasks, languages, models, protocols and metric units stay separate. Source report checksums are retained; duplicate experiment identities fail. No cross-benchmark composite or paired between-model significance test is calculated.
 
+## Local WarBias expansion
+
+The draft expansion is separate from the pinned public releases. Preparation verifies artifact hashes, bilingual identity and scoring metadata, frozen splits and profiles, QA evidence/answer roles, both actor orders and the benign-task rubric. It does not certify human or construct validity.
+
+```sh
+fair-uk-eval prepare-warbias \
+  --source /path/to/warbias_expansion/artifacts \
+  --cases /path/to/warbias_preparation/artifacts/cases.jsonl \
+  --output /path/to/new-bundle
+
+fair-uk-eval suite --dataset-bundle /path/to/new-bundle/manifest.json \
+  --benchmarks warbias_triplets warbias_cross_actor warbias_expanded_qa warbias_benign \
+  --languages uk en
+```
+
+Preparation defaults to the frozen **evaluation** split. `--split development`, `train` or `all` creates a different bundle in an empty directory; do not label an all-splits run held-out evaluation. The suite command above only previews execution. Original default-suite tasks are unchanged.
+
+| New track (each has `_uk` and `_en`) | Capability | Native outcomes |
+|---|---|---|
+| `warbias_triplets` | Candidate token scoring | Adapted SS, LMS, ICAT and ties |
+| `warbias_cross_actor` | Candidate token scoring | Same formulas on matched actor-swapped claims |
+| `warbias_expanded_qa` | Text generation | Accuracy, stereotype/counter/unknown/invalid rates and evidence gaps |
+| `warbias_benign` | Text generation, then rubric judging | Task success, full/any refusal and judgment coverage |
+
+Use `run` with a compatible `hf`/`vllm` backend for sentence scores. The generic `run-api` adapter also supports expanded QA and benign requests. Backend compatibility depends on capabilities, not a model-name list. Each report includes shared-case comparisons in `matched.csv`; the readable report shows up to twelve largest differences, while JSON retains every contrast and its case support.
+
+Benign outputs initially remain **unscored**. Judge saved responses with a separately configured generation model using the same provider configuration format as `run-api`:
+
+```sh
+fair-uk-eval judge-benign --task warbias_benign_uk \
+  --dataset-bundle /path/to/new-bundle/manifest.json \
+  --predictions results/warbias_benign_uk/predictions.jsonl \
+  --config judge.json --output results/benign-judge-uk
+
+fair-uk-eval score --task warbias_benign_uk \
+  --dataset-bundle /path/to/new-bundle/manifest.json \
+  --predictions results/warbias_benign_uk/predictions.jsonl \
+  --judgments results/benign-judge-uk/judgments.jsonl \
+  --output results/benign-scored-uk
+```
+
+The judge command previews requests without accessing credentials; add `--execute` to create judgments before rescoring. Raw responses are preserved. Judgments bind to the exact request, response, criteria and rubric version. Malformed judge output becomes unscorable, and missing judgments lower coverage. No keyword heuristic classifies refusal. This adds no annotator task or assignment.
+
+For UK–EN comparison, pass the original generation run directories to `compare`, plus `--uk-judgments` and `--en-judgments`. Judge identities/settings must match; utility/refusal deltas use only responses scorable in both languages. Automated judging itself requires validation before confirmatory claims. Inspect `content_validation.json` for the selected split's independent cases/tasks; rendered profiles do not increase that support.
+
 ## Validation and attribution
 
 Run `pytest tests/fair_uk -q` for offline formula, CLI, checkpoint and tiny local-model integration checks. Live provider configurations, GPU/vLLM execution, human data validation and confirmatory interval coverage remain unverified. The [CI template](fair-uk-ci.yml) is supplied but not installed as a workflow.

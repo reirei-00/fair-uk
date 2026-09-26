@@ -277,7 +277,8 @@ def test_warbias_condition_metrics_include_invalids_and_evidence_gap():
 def test_catalog_is_serializable_complete_and_defensive():
     catalog = metric_catalog()
     json.dumps(catalog, allow_nan=False)
-    assert len(catalog["benchmarks"]) == 5
+    assert len(catalog["benchmarks"]) == 7
+    assert {"warbias_triplets", "warbias_benign"} <= catalog["benchmarks"].keys()
     for benchmark in catalog["benchmarks"].values():
         ids = [m["id"] for m in benchmark["metrics"]]
         assert len(set(ids)) == len(ids)

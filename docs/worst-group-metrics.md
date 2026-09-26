@@ -11,6 +11,53 @@ For the exhaustive, versioned definitions, denominators, units and direction, ru
 reports. It distinguishes original formulas, adaptations and diagnostics. Using an
 original formula does not imply that our prompting reproduces the original study.
 
+## Fairness, utility and intervention effects
+
+Fairness and utility describe model behaviour at a checkpoint. Unlearning is an
+intervention whose effects are measured through changes in both. Keep these three
+reporting layers distinct; a UK–EN difference at one checkpoint does not measure
+cross-language transfer after unlearning.
+
+The following maps [Tetiana's metric plan](https://docs.google.com/spreadsheets/d/1FJGHttlJan3xpSjxHPOqYuJBsf27_LU-Uzu09j2dIVk/edit#gid=0)
+to reporting layers. This is a design classification, not a claim that every
+entry is implemented. The executable catalog above lists implemented scores.
+
+| Layer | Measures | Interpretation |
+| --- | --- | --- |
+| Utility: task performance | QA/coreference accuracy; benign-task success; general-capability scores | Whether the model completes its tasks correctly. General-capability evaluation is not yet integrated into the Fair-UK report. |
+| Utility: language sanity | LMS and unrelated controls | A narrow coherence/relevance check; not a substitute for general-capability evaluation. |
+| Utility: access to useful answers | M4a full/partial refusal on benign requests; M4b abstention with sufficient evidence | Overall rates describe lost access to an answer. Group disparities in these rates belong in the fairness layer. |
+| Fairness: stereotype associations | Triplet preference/SS and distance from the benchmark balance reference; BBQ bias score; WarBias condition-specific stereotype rates; WinoBias pro/anti gap | Preserve each dataset's definition. SS near 50 alone does not establish neutrality on individual pairs. |
+| Fairness: distribution of utility | M1 worst-group quality; M1b min/max ratio; matched group gaps in quality, refusal and abstention | Apply fairness summaries to a named utility outcome. Use shared content and adequate independent support; equal low quality is not a good utility result. |
+| Unlearning: target effect | Forget efficacy; NNR | Paired target neutralization before/after an intervention, including reversals. Candidate likelihoods are inputs, not completed NNR results. |
+| Unlearning: utility preservation | Retain utility; changes in LMS, task success, accuracy, M4a and M4b | Report absolute post-intervention quality alongside change from the frozen baseline. |
+| Unlearning: unequal impact | M2 disparity of quality loss | Range and standard deviation of group-level before/after changes; distinct from disparities at one checkpoint. |
+| Unlearning: transfer and redistribution | M3a actor; M3b topic; M3c gender/age; M3d language; RI | Require a declared intervention target and paired before/after outcomes at target and non-target locations. Matching datasets alone does not establish transfer. |
+
+**ICAT is a fairness–utility composite.** Report it alongside SS and LMS so one
+component cannot hide the other. Its before/after change belongs in intervention
+evaluation; it is not a standalone forgetting measure.
+
+Several entries are analysis dimensions or reliability checks rather than a
+fourth metric family:
+
+- **Severity:** repeat appropriate scores on severity strata. Current three-level
+  labels are provisional; they do not yet implement the proposed high/standard
+  reporting slice.
+- **Training imbalance:** a covariate for changes in quality/bias, using actual
+  training exposure. Evaluation row counts are not training exposure.
+- **Language, status, gender, age and topic:** comparison axes. Report matched
+  support and distinguish demographic disclosure from explicit-group contrasts.
+- **Uncertainty and diagnostics:** clustered intervals, independent support,
+  invalid outputs, format violations, score ties and judge coverage accompany
+  the relevant score rather than contributing to a combined fairness score.
+
+Current implementation provides checkpoint scores and matched group/UK–EN
+comparisons. The full before/after intervention layer remains unimplemented in
+Fair-UK. M1/M1b also still need a common-panel ranking rule and a prespecified
+minimum independent-support rule; descriptive extrema are already available.
+No intervention or model run is required to define and implement these analyses.
+
 ## Shared conventions
 
 - Rates use 0–1; percentages use 0–100; percentage-point gaps use −100–100.
@@ -155,6 +202,29 @@ coverage incomplete; available-group extrema cannot establish full coverage.
 Keep sparse groups visible as inconclusive. No universal fairness threshold applies.
 
 ## Uncertainty and validation
+
+The local WarBias expansion adds complete-sentence triplets and benign requests.
+Triplet SS/LMS/ICAT are explicit study adaptations with mean-token likelihoods,
+strict wins and tie reporting; they are not original StereoSet release scores.
+Expanded QA retains its own answer metrics. New bias-task rates average within
+frozen claim components and then across components; helpfulness averages within
+each practical task and then across tasks. Reports distinguish source-case counts
+from independent sampling units. Existing public tasks retain their definitions.
+
+`matched_comparisons` changes one status/gender/age attribute and uses only shared
+case IDs, with the same evidence condition. Nonshared topics and unscored shared
+cases are listed. Intrinsically gendered claims cannot enter a contrast with a
+gender for which that source case does not exist. Not-stated controls describe a
+disclosure contrast, not a known demographic identity. These matched gaps remain
+descriptive; they do not establish causal discrimination or intervention spillover.
+
+Benign responses have three binary task criteria, plus full/partial/no-refusal
+labels from a versioned rubric judge. Wrong attempts are not automatically refusals.
+Unjudged or unscorable outputs have undefined success/refusal scores, with judgment
+coverage reported on all responses. UK–EN utility/refusal comparisons restrict both
+languages to the same scorable response pairs. The full/any refusal and task-success
+rates receive an additional worst-group layer; signed matched differences do not
+receive parity ratios. Judge flags and rationales remain in the item records.
 
 Native standalone scores are point estimates. Additional rate intervals use an
 exploratory source-case bootstrap, preserving variants and recomputing extrema.

@@ -10,7 +10,13 @@ from pathlib import Path
 from lm_eval.fair_uk import VERSION
 from lm_eval.fair_uk.answers import NORMALIZED, POLICIES
 from lm_eval.fair_uk.capabilities import task_metadata, validate_backend
-from lm_eval.fair_uk.data import dataset_spec, load, merged_registry, select_clusters
+from lm_eval.fair_uk.data import (
+    dataset_spec,
+    family,
+    load,
+    merged_registry,
+    select_clusters,
+)
 from lm_eval.fair_uk.metrics import make_report, score_all
 from lm_eval.fair_uk.provenance import code_identity
 from lm_eval.fair_uk.reporting import (
@@ -31,6 +37,14 @@ def write_json(path, value):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "prepare-warbias":
+        from lm_eval.fair_uk.expansion import main as prepare_main
+
+        return prepare_main(argv[1:])
+    if argv and argv[0] == "judge-benign":
+        from lm_eval.fair_uk.benign import main as judge_main
+
+        return judge_main(argv[1:])
     if argv and argv[0] == "suite":
         from lm_eval.fair_uk.suite import main as suite_main
 
@@ -42,6 +56,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("suite", help="Plan or explicitly run a set of bias benchmarks")
+    commands.add_parser(
+        "prepare-warbias", help="Validate and prepare a local draft WarBias expansion"
+    )
+    commands.add_parser(
+        "judge-benign",
+        help="Preview or explicitly run rubric judging of saved benign responses",
+    )
     listing = commands.add_parser(
         "list", help="List pinned benchmark tasks", parents=[bundle_parser]
     )
@@ -106,6 +127,9 @@ def main(argv=None):
             )
         if command == "score":
             sub.add_argument("--predictions", type=Path, required=True)
+            sub.add_argument(
+                "--judgments", type=Path, help="Response-bound benign rubric judgments"
+            )
     compare = commands.add_parser(
         "compare", help="Compare paired UK/EN benchmark runs", parents=[bundle_parser]
     )
@@ -113,6 +137,8 @@ def main(argv=None):
     compare.add_argument("--en-run", type=Path, required=True)
     compare.add_argument("--uk-input", type=Path)
     compare.add_argument("--en-input", type=Path)
+    compare.add_argument("--uk-judgments", type=Path)
+    compare.add_argument("--en-judgments", type=Path)
     compare.add_argument("--output", type=Path, required=True)
     compare.add_argument("--bootstrap", type=int, default=1000)
     compare.add_argument("--seed", type=int, default=42)
@@ -139,6 +165,8 @@ def main(argv=None):
             args.seed,
             answer_policy=args.answer_policy,
             dataset_bundle=args.dataset_bundle,
+            uk_judgments=args.uk_judgments,
+            en_judgments=args.en_judgments,
         )
         args.output.mkdir(parents=True, exist_ok=True)
         write_json(args.output / "comparison.json", report)
@@ -273,7 +301,7 @@ def main(argv=None):
         "selected_rows": len(rows),
         "limit_clusters_per_stratum": args.limit_clusters_per_stratum,
     }
-    if args.task.startswith("warbias_"):
+    if family(args.task) == "warbias":
         run["scoring_policy"] = args.answer_policy
     if args.command == "run":
         from lm_eval.api.registry import get_model
@@ -287,7 +315,7 @@ def main(argv=None):
                 "temperature": 0.0,
                 "do_sample": False,
             }
-            if args.task.startswith("warbias_")
+            if family(args.task) in ("warbias", "warbias_benign")
             else None,
             batch_size=str(args.batch_size),
             model_identity=model_identity(args.model_args),
@@ -363,6 +391,19 @@ def main(argv=None):
             ).hexdigest(),
             model_identity="external_predictions_not_verified",
         )
+        if args.judgments:
+            if family(args.task) != "warbias_benign":
+                raise ValueError("Rubric judgments apply only to benign requests")
+            from lm_eval.fair_uk.benign import attach_judgments
+
+            predictions = attach_judgments(
+                rows,
+                predictions,
+                [json.loads(line) for line in args.judgments.read_text().splitlines()],
+            )
+            run["judgments_sha256"] = hashlib.sha256(
+                args.judgments.read_bytes()
+            ).hexdigest()
     scored = score_all(rows, predictions, args.answer_policy)
     report = make_report(scored, registry_rows, args.bootstrap, args.seed)
     report["provenance"] = run
@@ -399,6 +440,19 @@ def main(argv=None):
         )
     )
     write_csv(args.output / "groups.csv", list(group_rows(report)))
+    if "matched_comparisons" in report:
+        write_csv(
+            args.output / "matched.csv",
+            [
+                {
+                    key: json.dumps(value, ensure_ascii=False)
+                    if isinstance(value, (dict, list))
+                    else value
+                    for key, value in row.items()
+                }
+                for row in report["matched_comparisons"]
+            ],
+        )
     (args.output / "report.md").write_text(markdown(report))
     print(f"Report written to {args.output.resolve() / 'report.md'}")
 

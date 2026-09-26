@@ -13,6 +13,7 @@ from pathlib import Path
 from lm_eval.fair_uk.answers import NORMALIZED, POLICIES
 from lm_eval.fair_uk.capabilities import (
     BENCHMARKS,
+    DEFAULT_BENCHMARKS,
     resolve_tasks,
     task_metadata,
     validate_backend,
@@ -21,7 +22,7 @@ from lm_eval.fair_uk.data import load, merged_registry, select_clusters
 from lm_eval.fair_uk.provenance import code_identity
 
 
-DEFAULT_TASKS = tuple(tracks["uk"] for tracks in BENCHMARKS.values())
+DEFAULT_TASKS = tuple(BENCHMARKS[name]["uk"] for name in DEFAULT_BENCHMARKS)
 
 
 def _run_child(command):
@@ -203,7 +204,7 @@ def main(argv=None):
                 "dataset": registry[task],
                 **task_metadata(task),
                 "scoring_policy": args.answer_policy
-                if task.startswith("warbias_")
+                if task_metadata(task)["protocol"] == "strict_abc_generation_v1"
                 else None,
                 "estimated_requests_full_dataset": registry[task]["rows"]
                 * task_metadata(task)["requests_per_row"],
@@ -272,10 +273,19 @@ def main(argv=None):
             reports = []
             for task in selected:
                 current = task
+                task_model = (
+                    {**model, "protocol": task_metadata(task)["protocol"]}
+                    if args.model == "api"
+                    else model
+                )
                 prior = state["tasks"].get(task, {})
                 if prior.get("status") == "complete":
                     verified = verify_result(
-                        args.output / task, task, registry[task], expected[task], model
+                        args.output / task,
+                        task,
+                        registry[task],
+                        expected[task],
+                        task_model,
                     )
                     if verified != prior:
                         raise ValueError(
@@ -329,7 +339,7 @@ def main(argv=None):
                         f"{task} failed (exit {result.returncode}); Later tasks were not started"
                     )
                 state["tasks"][task] = verify_result(
-                    args.output / task, task, registry[task], expected[task], model
+                    args.output / task, task, registry[task], expected[task], task_model
                 )
                 write_state(path, state)
                 reports.append(str(args.output / task / "report.json"))

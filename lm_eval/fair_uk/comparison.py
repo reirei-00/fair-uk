@@ -3,6 +3,7 @@
 import hashlib
 import json
 from collections import defaultdict
+from pathlib import Path
 from statistics import fmean
 
 import numpy as np
@@ -23,7 +24,13 @@ from lm_eval.fair_uk.provenance import code_identity
 from lm_eval.fair_uk.reporting import native_entries
 
 
-def load_run(directory, input_path=None, answer_policy=NORMALIZED, dataset_bundle=None):
+def load_run(
+    directory,
+    input_path=None,
+    answer_policy=NORMALIZED,
+    dataset_bundle=None,
+    judgments_path=None,
+):
     manifest = json.loads((directory / "run.json").read_text())
     task = manifest["task"]
     if task not in merged_registry(dataset_bundle):
@@ -87,7 +94,9 @@ def load_run(directory, input_path=None, answer_policy=NORMALIZED, dataset_bundl
             validate_prediction,
         )
 
-        if identity != hosted_identity(manifest.get("hosted_config")):
+        if identity != hosted_identity(
+            manifest.get("hosted_config"), manifest["protocol"]
+        ):
             raise ValueError("Hosted run identity differs from its configuration")
         source_fingerprint = hashlib.sha256(
             json.dumps(
@@ -100,11 +109,28 @@ def load_run(directory, input_path=None, answer_policy=NORMALIZED, dataset_bundl
         for prediction in predictions:
             if prediction["id"] in indexed:
                 validate_prediction(indexed[prediction["id"]], prediction, identity)
+    if judgments_path is not None:
+        if family(task) != "warbias_benign":
+            raise ValueError("Rubric judgments apply only to benign requests")
+        from lm_eval.fair_uk.benign import attach_judgments
+
+        predictions = attach_judgments(
+            rows,
+            predictions,
+            [
+                json.loads(line)
+                for line in Path(judgments_path).read_text().splitlines()
+            ],
+        )
     scored = score_all(rows, predictions, answer_policy)
     provenance = {
         "run": manifest,
         "predictions_sha256": hashlib.sha256(prediction_path.read_bytes()).hexdigest(),
     }
+    if judgments_path is not None:
+        provenance["judgments_sha256"] = hashlib.sha256(
+            Path(judgments_path).read_bytes()
+        ).hexdigest()
     if manifest.get("model_backend") in (
         "hosted-api",
         "openai",
@@ -146,6 +172,15 @@ def align(uk, en):
         "protocol",
         "score_group",
         "category",
+        "expansion_version",
+        "comparison_unit",
+        "actor",
+        "gender",
+        "age",
+        "split",
+        "split_group_id",
+        "target_mention_position",
+        "rubric_sha256",
     )
     for key, row in left.items():
         other = right[key]
@@ -163,8 +198,10 @@ def align(uk, en):
 def paired_rates(uk, en, metric, direction, registered, bootstrap, seed):
     # One weight per source case is shared by both languages and every profile.
     clusters = defaultdict(lambda: defaultdict(list))
+    source_units = defaultdict(set)
     for a, b in zip(uk, en, strict=True):
         if a.get(metric) is not None and b.get(metric) is not None:
+            source_units[a["group"]].add(a.get("independent_case_unit", a["cluster"]))
             clusters[a["group"]][(a["stratum"], a["cluster"])].append(
                 (a[metric], b[metric])
             )
@@ -182,7 +219,8 @@ def paired_rates(uk, en, metric, direction, registered, bootstrap, seed):
             "uk": rates[0],
             "en": rates[1],
             "delta_en_minus_uk": float(rates[1] - rates[0]) if cases else None,
-            "source_cases": len(cases),
+            "source_cases": len(source_units[group]),
+            "sampling_units": len(cases),
             "paired_rows": sum(len(v) for v in clusters[group].values()),
             "ci95": None,
         }
@@ -212,7 +250,7 @@ def paired_rates(uk, en, metric, direction, registered, bootstrap, seed):
     if (
         bootstrap <= 0
         or not complete
-        or any(g["source_cases"] < 2 for g in groups.values())
+        or any(g["sampling_units"] < 2 for g in groups.values())
     ):
         return output
     rng = np.random.default_rng(seed)
@@ -258,6 +296,20 @@ def paired_rates(uk, en, metric, direction, registered, bootstrap, seed):
 
 def paired_native(uk, en, bootstrap, seed):
     """Recompute native statistics on paired case draws, including nonlinear scores."""
+    if family(uk[0]["task"]) == "warbias_benign":
+        # Judge coverage can differ by language. Native utility/refusal deltas
+        # must use the same scorable responses on both sides, like paired_rates.
+        left, right = [], []
+        for a, b in zip(uk, en, strict=True):
+            if not a["judgment_coverage"] or not b["judgment_coverage"]:
+                missing = {
+                    key: None
+                    for key in ("task_success", "full_refusal_rate", "any_refusal_rate")
+                }
+                a, b = {**a, **missing}, {**b, **missing}
+            left.append(a)
+            right.append(b)
+        uk, en = left, right
 
     def values(rows):
         return {
@@ -307,7 +359,12 @@ def paired_native(uk, en, bootstrap, seed):
                         row = source[row_index]
                         # Duplicated source draws must preserve WinoBias's paired correctness.
                         # Distinct draw IDs do not change the reported independent support.
-                        if family(row["task"]).startswith("winobias"):
+                        if row.get("expansion_version"):
+                            row = {
+                                **row,
+                                "cluster": f"{key[0]}:{draw}:{row['cluster']}",
+                            }
+                        elif family(row["task"]).startswith("winobias"):
                             row = {**row, "panel": f"{key[0]}:{draw}:{row['panel']}"}
                         target.append(row)
         x, y = values(left), values(right)
@@ -344,6 +401,15 @@ def compare_rows(uk, en, registry_uk, registry_en, bootstrap=1000, seed=42):
     full_uk, _ = align(eligible(registry_uk), eligible(registry_en))
     uk, en = align(eligible(uk), eligible(en))
     report = make_report(uk, full_uk, bootstrap=0)
+    if family(uk[0]["task"]) == "warbias_benign":
+        other_report = make_report(en, en, bootstrap=0)
+        if report.get("judge_identity") != other_report.get("judge_identity"):
+            raise ValueError(
+                "Paired benign reports require identical judge identities/settings"
+            )
+        validate_model_versions(
+            report["judge_version_evidence"], other_report["judge_version_evidence"]
+        )
     comparisons = []
     for spec in report["comparisons"]:
 
@@ -390,9 +456,17 @@ def compare_rows(uk, en, registry_uk, registry_en, bootstrap=1000, seed=42):
         "status": "pilot_human_unvalidated",
         "delta": "EN minus UK",
         "paired_rows": len(uk),
-        "source_cases": len({r["cluster"] for r in uk}),
+        "source_cases": len({r.get("independent_case_unit", r["cluster"]) for r in uk}),
+        "sampling_units": len({r["cluster"] for r in uk}),
         "partial_run": len(uk) != len(full_uk),
         "coverage": coverage,
+        **(
+            {
+                "native_missingness_policy": "Utility/refusal metrics use only responses scorable in both languages; judgment coverage retains all paired responses."
+            }
+            if family(uk[0]["task"]) == "warbias_benign"
+            else {}
+        ),
         "excluded_design_groups": report["excluded_design_groups"],
         "choice_disagreement_rate": fmean(
             a["choice_mass"] != b["choice_mass"] for a, b in choices
@@ -441,12 +515,14 @@ def compare_runs(
     seed=42,
     answer_policy=NORMALIZED,
     dataset_bundle=None,
+    uk_judgments=None,
+    en_judgments=None,
 ):
     uk, full_uk, provenance_uk = load_run(
-        uk_dir, uk_input, answer_policy, dataset_bundle
+        uk_dir, uk_input, answer_policy, dataset_bundle, uk_judgments
     )
     en, full_en, provenance_en = load_run(
-        en_dir, en_input, answer_policy, dataset_bundle
+        en_dir, en_input, answer_policy, dataset_bundle, en_judgments
     )
     a, b = provenance_uk["run"], provenance_en["run"]
     for key in (

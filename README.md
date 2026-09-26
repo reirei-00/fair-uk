@@ -40,6 +40,7 @@ Runs produce raw predictions, native and group metrics, provenance, and JSON/Mar
 
 - [Usage guide](docs/fair-uk.md): datasets, model configuration, bilingual preparation, resume, rescoring and comparisons.
 - [Metrics reference](docs/worst-group-metrics.md): each benchmark's definitions, group analysis and interpretation limits.
+- [Draft WarBias expansion](docs/fair-uk.md#local-warbias-expansion): validated local bundles, matched comparisons and benign-request judging.
 
 ## Attribution
 

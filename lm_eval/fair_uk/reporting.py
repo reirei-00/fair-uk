@@ -51,6 +51,10 @@ def native_entries(report):
         "primary_pairs",
         "strata",
         "bias_eligible_rows",
+        "sampling_units",
+        "judged_rows",
+        "pending_rows",
+        "unscorable_rows",
     }
     for record in report["native"]:
         scope = " / ".join(
@@ -145,6 +149,49 @@ def markdown(report):
             "Design exclusions: " + ", ".join(report["excluded_design_groups"]),
             "",
         ]
+    if "matched_comparisons" in report:
+        available = [
+            r
+            for r in report["matched_comparisons"]
+            if r["delta_right_minus_left"] is not None
+        ]
+        largest = sorted(
+            available, key=lambda r: abs(r["delta_right_minus_left"]), reverse=True
+        )[:12]
+        lines += [
+            "## Comparisons on shared content",
+            "",
+            report["comparison_limits"],
+            "",
+            f"{len(available)} scored contrasts. Up to 12 largest absolute differences are shown; all contrasts and shared/unmatched case IDs are in `matched.csv` and `report.json`.",
+            "",
+            table(
+                [
+                    "Axis / condition",
+                    "Metric",
+                    "Left group",
+                    "Right group",
+                    "Right − left",
+                    "Matched cases / sampling units",
+                    "95% interval",
+                ],
+                [
+                    (
+                        r["axis"] + " / " + r["condition"],
+                        r["metric"],
+                        r["left_group"],
+                        r["right_group"],
+                        r["delta_right_minus_left"],
+                        f"{r['matched_cases']} / {r['matched_sampling_units']}",
+                        r["ci95"],
+                    )
+                    for r in largest
+                ],
+            ),
+            "",
+        ]
+    if report.get("judging_note"):
+        lines += [report["judging_note"], ""]
     return "\n".join(lines)
 
 

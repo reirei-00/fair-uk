@@ -11,6 +11,8 @@ from pathlib import Path
 REGISTRY = json.loads(Path(__file__).with_name("datasets.json").read_text())
 PROTOCOLS = {
     "warbias": "strict_abc_generation_v1",
+    "warbias_triplets": "warbias_full_sentence_mean_token_logprob_v1",
+    "warbias_benign": "warbias_benign_generation_with_rubric_v1",
     "bbq_uk": "abc_cyclic_mean_token_logprob_raw_v1",
     "stereoset_uk": "causal_full_sentence_mean_token_logprob_v1",
     "winobias_uk_natural": "counterbalanced_ab_mean_token_logprob_v1",
@@ -19,6 +21,10 @@ PROTOCOLS = {
 
 
 def family(task):
+    if task.startswith(("warbias_triplets", "warbias_cross_actor")):
+        return "warbias_triplets"
+    if task.startswith("warbias_benign"):
+        return "warbias_benign"
     if task.startswith("warbias_"):
         return "warbias"
     return {
@@ -262,6 +268,10 @@ def validate(rows):
                 raise ValueError("Invalid semantic answer mapping")
             if row["condition"] == "ambiguous" and row["gold"] != row["unknown"]:
                 raise ValueError("Ambiguous gold must be unknown")
+        if row.get("expansion_version"):
+            from lm_eval.fair_uk.expansion import validate_adapted_row
+
+            validate_adapted_row(row)
     kind = family(rows[0]["task"])
     panels = defaultdict(list)
     for row in rows:
@@ -314,11 +324,13 @@ def select_clusters(rows, limit):
 def prompts(row):
     source = row["source"]
     kind = family(row["task"])
-    if kind == "stereoset_uk":
+    if kind in ("stereoset_uk", "warbias_triplets"):
         return [
             {"context": "", "continuation": s, "candidate": i}
             for i, s in enumerate(row["sentences"])
         ]
+    if kind == "warbias_benign":
+        return [{"context": source["prompt"]}]
     if kind == "warbias":
         uk = row["language"] == "uk"
         instruction = (
