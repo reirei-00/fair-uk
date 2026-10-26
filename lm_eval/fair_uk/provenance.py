@@ -73,3 +73,38 @@ def code_identity():
         str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in paths
     }
+
+
+def fixed_inference_settings(run):
+    """Settings shared by phases, languages and original/neutral likelihoods.
+
+    Input fingerprints and row counts deliberately differ between these runs.
+    Historical manifests may lack tokenizer evidence; keep that absence explicit
+    rather than equating it to a recorded fingerprint.
+    """
+    assets = run.get("evaluation_asset_identity")
+    tokenizer = {"status": "not_recorded"}
+    if assets is not None:
+        digest = assets.get("tokenizer_sha256") if isinstance(assets, dict) else None
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError(
+                "Recorded tokenizer evidence requires a SHA256 fingerprint"
+            )
+        tokenizer = {"status": "recorded", "sha256": digest}
+    return {
+        "tokenizer_identity": tokenizer,
+        **{
+            key: run.get(key)
+            for key in (
+                "model_backend",
+                "protocol",
+                "seed",
+                "batch_size",
+                "runtime_versions",
+                "harness_version",
+                "version",
+                "generation_config",
+                "scoring_policy",
+            )
+        },
+    }
