@@ -8,14 +8,13 @@ from statistics import fmean
 import numpy as np
 
 from lm_eval.fair_uk.data import family
+from lm_eval.fair_uk.warbias.aggregate import actor_matched
+from lm_eval.fair_uk.warbias.stats import component_mean, spearman
 
 
 def macro(rows, metric):
-    units = defaultdict(list)
-    for r in rows:
-        if r.get(metric) is not None:
-            units[r["cluster"]].append(r[metric])
-    return fmean(fmean(v) for v in units.values()) if units else None
+    """Component-weighted mean of ``metric`` (see warbias.stats.component_mean)."""
+    return component_mean(rows, metric)
 
 
 def native(rows):
@@ -135,7 +134,124 @@ def native(rows):
                 pending_rows=sum(r["judgment_status"] == "pending" for r in selected),
             )
         output.append(record)
+    if triplets:
+        output.extend(_marginal_scopes(rows))
     return output
+
+
+def _marginal_scopes(rows):
+    """Actor, gender and age marginals; each value pools every profile carrying it.
+
+    Marginal summaries have different topic composition across values. They are
+    descriptive; matched_comparisons restricts contrasts to shared cases.
+    """
+    output = []
+    for axis in ("actor", "gender", "age"):
+        if any(r.get(axis) is None for r in rows):
+            continue
+        for value in sorted({r[axis] for r in rows}):
+            selected = [r for r in rows if r[axis] == value]
+            ss, lms = macro(selected, "stereotype_preference"), macro(selected, "lms")
+            output.append(
+                {
+                    "scope": axis,
+                    axis: value,
+                    "n": len(selected),
+                    "source_cases": len({r["independent_case_unit"] for r in selected}),
+                    "sampling_units": len({r["cluster"] for r in selected}),
+                    "ss": 100 * ss,
+                    "lms": 100 * lms,
+                    "icat": 100 * lms * min(ss, 1 - ss) / 0.5,
+                    "stereotype_tie_rate": macro(selected, "stereotype_tie"),
+                }
+            )
+    return output
+
+
+def _words(text):
+    return len(text.split())
+
+
+LENGTH_TOLERANCES = (0, 1, 2, 3)
+
+
+def length_diagnostics(rows, sentences=None, tolerances=LENGTH_TOLERANCES):
+    """Describe how sentence length relates to triplet preferences.
+
+    Lengths are whitespace word counts of the scored sentences, so the
+    diagnostic is tokenizer-independent and identical across models. It never
+    adjusts SS or LMS: buckets restate the same component-macro scores on
+    subsets defined by counter-minus-stereotype length, and correlations relate
+    length differences to the per-item mean-token log-probability margins.
+    """
+    sentences = sentences or {}
+    texts = {r["id"]: sentences.get(r["id"], r.get("sentences")) for r in rows}
+    if not rows or any(
+        len(texts[r["id"]] or ()) != 3 or len(r.get("candidate_means") or ()) != 3
+        for r in rows
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "rows_lack_three_scored_sentences",
+        }
+    items = []
+    for r in rows:
+        s, c, u = (_words(x) for x in texts[r["id"]])
+        means = r["candidate_means"]
+        items.append(
+            {
+                "cluster": r["cluster"],
+                "stereotype_preference": r["stereotype_preference"],
+                "lms": r["lms"],
+                "counter_minus_stereotype_words": c - s,
+                "related_minus_unrelated_words": (s + c) / 2 - u,
+                "association_margin": means[0] - means[1],
+                "related_minus_unrelated_margin": (means[0] + means[1]) / 2 - means[2],
+                "words": (s, c, u),
+            }
+        )
+    diff = [i["counter_minus_stereotype_words"] for i in items]
+    buckets = []
+    for tol in tolerances:
+        for name, test in (
+            ("counter_longer", lambda d, t=tol: d > t),
+            ("within_tolerance", lambda d, t=tol: abs(d) <= t),
+            ("stereotype_longer", lambda d, t=tol: d < -t),
+        ):
+            subset = [i for i in items if test(i["counter_minus_stereotype_words"])]
+            ss = macro(subset, "stereotype_preference")
+            lms = macro(subset, "lms")
+            buckets.append(
+                {
+                    "tolerance_words": tol,
+                    "bucket": name,
+                    "n": len(subset),
+                    "sampling_units": len({i["cluster"] for i in subset}),
+                    "ss": None if ss is None else 100 * ss,
+                    "lms": None if lms is None else 100 * lms,
+                }
+            )
+    return {
+        "status": "available",
+        "length_unit": "whitespace_words",
+        "mean_words": {
+            role: fmean(i["words"][k] for i in items)
+            for k, role in enumerate(("stereotype", "counter", "unrelated"))
+        },
+        "rows_counter_longer": sum(d > 0 for d in diff),
+        "rows_equal_length": sum(d == 0 for d in diff),
+        "rows_stereotype_longer": sum(d < 0 for d in diff),
+        "spearman_length_difference_vs_association_margin": spearman(
+            diff, [i["association_margin"] for i in items]
+        ),
+        "spearman_related_unrelated_length_vs_margin": spearman(
+            [i["related_minus_unrelated_words"] for i in items],
+            [i["related_minus_unrelated_margin"] for i in items],
+        ),
+        "buckets": buckets,
+        "weighting": "equal claim components after within-component averaging",
+        "interpretation": "Diagnostic of length sensitivity under mean-token scoring; buckets are not length-controlled estimates and correlations are item-level and descriptive.",
+    }
 
 
 def matched_comparisons(rows, registry, bootstrap=0, seed=42):
@@ -241,9 +357,18 @@ def enrich_report(report, rows, registry, bootstrap, seed):
     report["source_cases"] = len({r["independent_case_unit"] for r in rows})
     report["sampling_units"] = len({r["cluster"] for r in rows})
     report["sampling_unit_kind"] = kind
-    report["status"] = "staged_candidate_human_unvalidated"
+    annotated = bool(rows[0].get("annotation_panel_version"))
+    report["status"] = (
+        "released_annotated_panel"
+        if annotated
+        else "staged_candidate_human_unvalidated"
+    )
     report["data_split"] = sorted({r["split"] for r in rows})
-    report["excluded_design_groups"] = ["veteran|women|older"]
+    report["excluded_design_groups"] = [] if annotated else ["veteran|women|older"]
+    if family(rows[0]["task"]) == "warbias_triplets":
+        report["length_diagnostics"] = length_diagnostics(
+            rows, {r["id"]: r.get("sentences") for r in registry}
+        )
     report["bootstrap"]["method"] = (
         f"{kind} percentile bootstrap; all related variants and profiles stay together"
     )
@@ -261,12 +386,21 @@ def enrich_report(report, rows, registry, bootstrap, seed):
                 }
             )
     report["matched_comparisons"] = matched_comparisons(rows, registry, bootstrap, seed)
+    if family(rows[0]["task"]) == "warbias_triplets":
+        report["actor_matched"] = actor_matched(
+            rows, fields=("stereotype_preference", "lms"), draws=bootstrap, seed=seed
+        )
     report["comparison_limits"] = (
         "Unrestricted profile summaries can have different topic composition. Use matched_comparisons for shared-case contrasts; "
         "intrinsically gendered claims do not enter a gender contrast without a matching source case. "
         "Not-stated baselines measure disclosure differences. Age is category wording in triplets and explicit ages in QA/benign tasks. "
         "Severity remains provisional and no before/after intervention effect has been measured."
     )
+    if annotated:
+        report["comparison_limits"] = report["comparison_limits"].replace(
+            "Age is category wording in triplets and explicit ages in QA/benign tasks. ",
+            "Gender and age are realised in the released sentence wording and bound from the frozen preparation inventory. ",
+        )
     if family(rows[0]["task"]) == "warbias_benign":
         identities = {
             json.dumps(r["judge_identity"], sort_keys=True)

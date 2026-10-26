@@ -570,7 +570,7 @@ def make_report(rows, registry_rows, bootstrap=1000, seed=42):
             "parse_methods": dict(Counter(row["answer_parse_method"] for row in rows)),
             "note": "Format violations are separate from semantic invalid answers. Raw responses are unchanged.",
         }
-    if rows[0].get("expansion_version"):
+    if rows[0].get("expansion_version") or rows[0].get("annotation_panel_version"):
         from lm_eval.fair_uk.expansion_metrics import enrich_report
 
         enrich_report(result, rows, registry_rows, bootstrap, seed)

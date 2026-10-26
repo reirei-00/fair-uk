@@ -7,11 +7,16 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from lm_eval.fair_uk.warbias.rows import (
+    PROTOCOL as WARBIAS_TRIPLET_PROTOCOL,
+    validate_adapted_row as validate_panel_row,
+)
+
 
 REGISTRY = json.loads(Path(__file__).with_name("datasets.json").read_text())
 PROTOCOLS = {
     "warbias": "strict_abc_generation_v1",
-    "warbias_triplets": "warbias_full_sentence_mean_token_logprob_v1",
+    "warbias_triplets": WARBIAS_TRIPLET_PROTOCOL,
     "warbias_benign": "warbias_benign_generation_with_rubric_v1",
     "bbq_uk": "abc_cyclic_mean_token_logprob_raw_v1",
     "stereoset_uk": "causal_full_sentence_mean_token_logprob_v1",
@@ -272,6 +277,8 @@ def validate(rows):
             from lm_eval.fair_uk.expansion import validate_adapted_row
 
             validate_adapted_row(row)
+        if row.get("annotation_panel_version"):
+            validate_panel_row(row)
     kind = family(rows[0]["task"])
     panels = defaultdict(list)
     for row in rows:

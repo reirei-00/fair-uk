@@ -387,6 +387,36 @@ _FAMILIES["warbias_triplets"] = {
             "percentage_points",
         ),
     ],
+    "scopes": {
+        "component_macro": "All triplets in the run.",
+        "profile": "One actor|gender|age profile.",
+        "actor": "Marginal over every profile with this actor; descriptive, topic composition differs between actors.",
+        "gender": "Marginal over every profile with this gender wording, including not_stated; descriptive.",
+        "age": "Marginal over every profile with this age wording, including not_stated; descriptive.",
+    },
+    "diagnostics": [
+        _metric(
+            "length_diagnostics.buckets[].ss",
+            "SS restated on triplets whose counter-minus-stereotype whitespace word count exceeds +t (counter_longer), lies within +/-t (within_tolerance) or is below -t (stereotype_longer), for t in 0, 1, 2, 3.",
+            "Triplets in the bucket, averaged within claim components, then equal components.",
+            "diagnostic",
+            notes="Subsets are not length-controlled estimates; tokenizer-independent word counts are identical across models.",
+        ),
+        _metric(
+            "length_diagnostics.spearman_length_difference_vs_association_margin",
+            "Item-level Spearman correlation between counter-minus-stereotype word count and the mean-token log-probability margin (stereotype minus counter-stereotype).",
+            "All scored triplets; null with fewer than three rows or constant ranks.",
+            "diagnostic",
+            "correlation",
+        ),
+        _metric(
+            "length_diagnostics.spearman_related_unrelated_length_vs_margin",
+            "Item-level Spearman correlation between mean related minus unrelated word count and the mean related minus unrelated log-probability margin.",
+            "All scored triplets; null with fewer than three rows or constant ranks.",
+            "diagnostic",
+            "correlation",
+        ),
+    ],
     "group_outcomes": ["lms"],
 }
 _FAMILIES["warbias_benign"] = {
@@ -452,6 +482,10 @@ def metric_catalog(task=None):
             "uncertainty": "Additional group comparisons use a stratified source-case percentile bootstrap with extrema recomputed per replicate. Native point estimates do not currently include standalone confidence intervals.",
         }
     )
+    if task.startswith("warbias_triplets_annotated_"):
+        result["protocol_note"] += (
+            " Annotated panel: released triplets at a pinned revision, with actor, gender and age bound from the frozen preparation inventory and claim components from the frozen split design."
+        )
     if task.startswith("warbias_expanded_qa_"):
         result["protocol_note"] += (
             " Expanded QA uses component-macro native rates and both actor mention orders; matched-content contrasts exclude nonshared cases."
