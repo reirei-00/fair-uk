@@ -65,6 +65,11 @@ and model training cannot happen while scoring saved predictions.
 
 ## Evaluate both checkpoints
 
+`configs/paper/models.json` preserves the six registered base-model pins and
+their source-configuration digest. Actual intervention checkpoints must be
+identified by their own trainer receipts; these base pins do not qualify a
+new runtime or method-specific integration.
+
 Use the same frozen bundle, tokenizer, scoring protocol and inference settings
 for the base and intervention checkpoint. Collect original **and** neutral runs
 for each checkpoint and language. Follow the [WarBias guide](warbias-detection.md)
