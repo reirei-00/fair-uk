@@ -35,7 +35,8 @@ ipython_config.py
 
 # Output and data
 /output/
-/data/
+/data/*
+!/data/paper/
 /temp/
 /test_logs/
 
