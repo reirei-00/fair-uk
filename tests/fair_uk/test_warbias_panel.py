@@ -54,6 +54,9 @@ def test_report_writes_primary_and_diagnostic_outputs(report):
     sources = json.loads((out / "panel_sources.json").read_text())
     assert sum(r["rows"] for r in sources["runs"]["en"]) == len(PROFILES)
     assert sources["shared_inference_identity"]["model_backend"] == "vllm"
+    assert sources["shared_inference_identity"]["tokenizer_identity"] == {
+        "status": "not_recorded"
+    }
 
 
 def test_report_rejects_gaps_and_mixed_identities(report):
@@ -100,6 +103,75 @@ def test_phase_collection_consumes_verified_predictions_without_rereading(
     assert [source["predictions_sha256"] for source in collected.sources] == [
         digests[path] for path in paths
     ]
+
+
+def _record_inference_evidence(*streams):
+    for stream in streams:
+        for entries in stream.values():
+            for _bundle, directory in entries:
+                path = directory / "run.json"
+                run = json.loads(path.read_text())
+                run.update(batch_size="1", runtime_versions={"torch": "fixture"})
+                run["evaluation_asset_identity"] = {
+                    "tokenizer_sha256": "f" * 64,
+                    # Each phase/task naturally tokenizes different text.
+                    "input_sha256": digest(path),
+                }
+                path.write_text(json.dumps(run))
+
+
+def test_report_compares_tokenizer_but_allows_different_inputs(report):
+    _out, full, _phases, runs, neutral_runs, tmp = report
+    _record_inference_evidence(runs, neutral_runs)
+    output = panel_report(
+        full, runs, tmp / "recorded_inputs", neutral_runs=neutral_runs, bootstrap=0
+    )
+    sources = json.loads((output / "panel_sources.json").read_text())
+    assert sources["shared_inference_identity"]["tokenizer_identity"] == {
+        "status": "recorded",
+        "sha256": "f" * 64,
+    }
+
+
+@pytest.mark.parametrize("mismatch", ["tokenizer", "batch", "runtime", "missing"])
+def test_report_rejects_different_neutral_inference_settings(report, mismatch):
+    _out, full, _phases, runs, neutral_runs, tmp = report
+    _record_inference_evidence(runs, neutral_runs)
+    for entries in neutral_runs.values():
+        for _bundle, directory in entries:
+            path = directory / "run.json"
+            run = json.loads(path.read_text())
+            if mismatch == "tokenizer":
+                run["evaluation_asset_identity"]["tokenizer_sha256"] = "b" * 64
+            elif mismatch == "batch":
+                run["batch_size"] = "16"
+            elif mismatch == "runtime":
+                run["runtime_versions"] = {"torch": "another-version"}
+            else:
+                del run["evaluation_asset_identity"]
+            path.write_text(json.dumps(run))
+    with pytest.raises(ValueError, match="inference code"):
+        panel_report(
+            full,
+            runs,
+            tmp / "mismatched_inputs",
+            neutral_runs=neutral_runs,
+            bootstrap=0,
+        )
+
+
+@pytest.mark.parametrize("count", [0, -1, True, 1.5])
+def test_report_rejects_invalid_saved_token_counts(report, count):
+    _out, full, _phases, runs, neutral_runs, tmp = report
+    _bundle, directory = runs["uk"][0]
+    path = directory / "predictions.jsonl"
+    predictions = [json.loads(line) for line in path.read_text().splitlines()]
+    predictions[0]["token_counts"][0] = count
+    write_jsonl(path, predictions)
+    output = tmp / "bad_token_counts"
+    with pytest.raises(ValueError, match="positive integer token counts"):
+        panel_report(full, runs, output, neutral_runs=neutral_runs, bootstrap=0)
+    assert not output.exists()
 
 
 def _change_full_panel_source(bundle, *, neutral, change):
