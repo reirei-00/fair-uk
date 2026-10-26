@@ -104,7 +104,16 @@ results/intervention/intervention.json --intervention trainer/intervention.json
 --exposure trainer/exposure.json --release training-data/release.json --output
 results/attributed.json`. This verifies both exposure hashes and evaluated
 checkpoint identities; an altered checkpoint or release cannot inherit a method
-label. Older runs
+label.
+
+Method attribution additionally requires the trainer's starting-checkpoint
+verification: the declared checkpoint reference, verified file inventory and
+actual loaded tensor-state fingerprint. Historical declaration-only receipts
+remain unverified; the binder does not upgrade them. For primary language
+transfer, the declared training language and language slots must agree with
+the trainer receipt. Missing language evidence leaves transfer unavailable.
+
+Older runs
 without effective tokenizer/input evidence cannot qualify for this stricter
 paired adapter; their original provenance is preserved.
 

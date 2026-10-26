@@ -276,6 +276,27 @@ def run_comparison(saved_panels, output="paired", **kwargs):
     )
 
 
+@pytest.mark.parametrize("mismatch", ["tokenizer", "batch", "runtime"])
+def test_primary_pair_rejects_within_state_stream_mismatch(saved_panels, mismatch):
+    _full, _before, _after, before_neutral, after_neutral, _tmp = saved_panels
+    # The mismatch is identical before and after, so a per-stream time check
+    # alone cannot reject this invalid original/neutral subtraction.
+    for stream in (before_neutral, after_neutral):
+        for entries in stream.values():
+            for _bundle, directory in entries:
+                path = directory / "run.json"
+                run = json.loads(path.read_text())
+                if mismatch == "tokenizer":
+                    run["evaluation_asset_identity"]["tokenizer_sha256"] = "b" * 64
+                elif mismatch == "batch":
+                    run["batch_size"] = "16"
+                else:
+                    run["runtime_versions"] = {"torch": "another-version"}
+                path.write_text(json.dumps(run))
+    with pytest.raises(ValueError, match="Original and neutral runs differ"):
+        run_comparison(saved_panels)
+
+
 def test_saved_four_run_groups_bind_checkpoint_source_and_primary_outputs(saved_panels):
     output = run_comparison(saved_panels)
     report = json.loads((output / "intervention.json").read_text())

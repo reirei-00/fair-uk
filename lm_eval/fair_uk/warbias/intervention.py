@@ -22,7 +22,7 @@ from lm_eval.fair_uk.warbias.panel import (
 )
 from lm_eval.fair_uk.warbias.rows import require, task_name
 from lm_eval.fair_uk.warbias.schema import AXES, LANGUAGES, REFERENCE_VALUES
-from lm_eval.fair_uk.warbias.scoring import prior_normalised_items
+from lm_eval.fair_uk.warbias.scoring import prior_normalised_items, summed_logprobs
 from lm_eval.fair_uk.warbias.stats import (
     component_bootstrap,
     component_mean,
@@ -416,15 +416,8 @@ def _load_state(full_bundle, originals, neutrals):
         )
         inference |= original.inference | neutral.inference
         for collected in (original, neutral):
-            require(
-                all(
-                    isinstance(p.get("token_counts"), list)
-                    and len(p["token_counts"]) == 3
-                    and all(type(n) is int and n > 0 for n in p["token_counts"])
-                    for p in collected.predictions
-                ),
-                "Primary scoring requires three positive integer token counts",
-            )
+            for prediction in collected.predictions:
+                summed_logprobs(prediction)
         items[language] = prior_normalised_items(
             original.registry,
             original.predictions,

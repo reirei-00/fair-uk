@@ -47,6 +47,13 @@ def artifacts():
             "exposure_canonical_sha256": canonical_sha256(exposure),
         },
     }
+    intervention["training"]["starting_checkpoint_verification"] = {
+        "schema_version": 1,
+        "method": "loaded_state_from_verified_checkpoint_bytes",
+        "checkpoint_reference_sha256": canonical_sha256(intervention["before"]),
+        "state_sha256": "e" * 64,
+        "files_sha256": {"weights.bin": "f" * 64},
+    }
     report = {
         "kind": "paired_native_checkpoint_evaluation",
         "provenance": {
@@ -85,5 +92,91 @@ def test_different_checkpoint_or_trainer_evidence_rejects(damage):
         exposure["extra"] = "changed"
     else:
         release["release_id"] = "changed"
+    with pytest.raises(ValueError):
+        bind_training_evidence(report, intervention, exposure, release)
+
+
+def primary_artifacts():
+    native, intervention, exposure, release = artifacts()
+    release["languages"] = ["en"]
+    intervention["training"]["language"] = "en"
+    exposure["data_release_sha256"] = canonical_sha256(release)
+    intervention["data_release_sha256"] = canonical_sha256(release)
+    intervention["training"]["exposure_canonical_sha256"] = canonical_sha256(exposure)
+    report = {
+        "kind": "paired_before_after_primary_warbias",
+        "sources": {
+            state: {
+                language: {
+                    stream: [
+                        {
+                            "model_identity": native["provenance"][state]["run"][
+                                "model_identity"
+                            ]
+                        }
+                    ]
+                    for stream in ("original", "neutral")
+                }
+                for language in ("uk", "en")
+            }
+            for state in ("before", "after")
+        },
+        "language_transfer": {
+            "status": "available",
+            "training_language": "en",
+            "language_pair": {"lg1": "uk", "lg2": "en"},
+            "training_slot": "lg2",
+            "opposite_slot": "lg1",
+        },
+    }
+    return report, intervention, exposure, release
+
+
+def test_verified_receipt_binds_the_declared_transfer_arm():
+    assert bind_training_evidence(*primary_artifacts())["training_language"] == "en"
+
+
+@pytest.mark.parametrize(
+    "damage", ["language", "training_slot", "opposite_slot", "missing_language"]
+)
+def test_mislabeled_language_transfer_cannot_receive_matched_attribution(damage):
+    report, intervention, exposure, release = primary_artifacts()
+    transfer = report["language_transfer"]
+    if damage == "language":
+        transfer["training_language"] = "uk"
+    elif damage == "missing_language":
+        transfer["training_language"] = None
+    elif damage == "training_slot":
+        transfer["training_slot"] = "lg1"
+    else:
+        transfer["opposite_slot"] = "lg2"
+    with pytest.raises(ValueError, match="language"):
+        bind_training_evidence(report, intervention, exposure, release)
+
+
+def test_missing_transfer_language_keeps_the_effect_unavailable():
+    report, intervention, exposure, release = primary_artifacts()
+    report["language_transfer"] = {
+        "status": "unavailable",
+        "training_language": None,
+        "reason": "missing_training_language",
+    }
+    bound = bind_training_evidence(report, intervention, exposure, release)
+    assert bound["training_language"] == "en"
+    assert report["language_transfer"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize("damage", ["missing", "reference", "state", "files"])
+def test_unverified_starting_weights_cannot_receive_method_attribution(damage):
+    report, intervention, exposure, release = artifacts()
+    evidence = intervention["training"]["starting_checkpoint_verification"]
+    if damage == "missing":
+        del intervention["training"]["starting_checkpoint_verification"]
+    elif damage == "reference":
+        evidence["checkpoint_reference_sha256"] = "0" * 64
+    elif damage == "state":
+        evidence["state_sha256"] = "not-a-fingerprint"
+    else:
+        evidence["files_sha256"] = {}
     with pytest.raises(ValueError):
         bind_training_evidence(report, intervention, exposure, release)
