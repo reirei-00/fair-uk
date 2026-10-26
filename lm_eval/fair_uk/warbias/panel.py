@@ -15,6 +15,7 @@ from lm_eval.fair_uk.baseline_metrics import baseline_profile
 from lm_eval.fair_uk.comparison import compare_rows
 from lm_eval.fair_uk.data import digest, load
 from lm_eval.fair_uk.metrics import make_report
+from lm_eval.fair_uk.provenance import fixed_inference_settings
 from lm_eval.fair_uk.runs import load_verified_run
 from lm_eval.fair_uk.warbias.detection import (
     detection_analysis,
@@ -35,7 +36,7 @@ RUN_IDENTITY_FIELDS = (
     "code_identity",
     "seed",
 )
-INFERENCE_FIELDS = ("model_identity", "model_backend", "model_args", "protocol", "seed")
+INFERENCE_FIELDS = ("model_identity", "model_args")
 # Modules whose code determines saved likelihoods; other fair_uk modules only analyse.
 INFERENCE_CODE = ("fair_uk/runner.py", "fair_uk/data.py", "fair_uk/provenance.py")
 RAW_DIAGNOSTICS = "raw_scoring_diagnostics"
@@ -60,6 +61,7 @@ def inference_identity(provenance):
     code = run.get("code_identity") or {}
     return json.dumps(
         {
+            **fixed_inference_settings(run),
             **{k: run.get(k) for k in INFERENCE_FIELDS},
             "inference_code": {
                 k: v
