@@ -104,6 +104,15 @@ def validate_judgment(row, response, judgment):
     ):
         raise ValueError("Judgment provenance is required")
     check_labels(judgment["labels"], response)
+    if (
+        judgment["judge_identity"].get("provider") == "jev"
+        or "raw_typed_response" in judgment
+        or "typed_response_sha256" in judgment
+        or "question_template_version" in judgment
+    ):
+        from lm_eval.fair_uk import jev
+
+        jev.validate_judgment(row, response, judgment)
 
 
 def score_response(row, prediction):
@@ -171,7 +180,7 @@ def judge_prompt(row, response):
     schema = {
         "refusal_label": "none|partial|full|unscorable",
         "criterion_scores": ["0|1|null"] * 3,
-        "flags": {flag: "true|false|null" for flag in FLAGS},
+        "flags": dict.fromkeys(FLAGS, "true|false|null"),
         "rationale": "Brief explanation tied to this response",
         "evidence_quotes": [],
     }
@@ -196,7 +205,7 @@ def parse_judgment(row, response, raw, judge_identity):
         labels = {
             "refusal_label": "unscorable",
             "criterion_scores": [None] * 3,
-            "flags": {flag: None for flag in FLAGS},
+            "flags": dict.fromkeys(FLAGS),
             "rationale": "Judge output failed schema/evidence validation: " + error,
             "evidence_quotes": [],
         }
@@ -223,7 +232,7 @@ def main(argv=None):
         "--config",
         type=Path,
         required=True,
-        help="Judge provider configuration; any supported generation model",
+        help="Judge configuration; hosted generation or JEV typed decisions",
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit-clusters-per-stratum", type=int)
@@ -235,6 +244,20 @@ def main(argv=None):
     )
     predictions = read_rows(args.predictions)
     attach_judgments(rows, predictions, [])  # Exact selected IDs before any request.
+    config = json.loads(args.config.read_text())
+    if config.get("provider") == "jev":
+        from lm_eval.fair_uk import jev
+        from lm_eval.fair_uk.credentials import credential_environment
+
+        keychain = config.pop("keychain", None)
+        config = jev.validate_config(config)
+        if not args.execute:
+            print(json.dumps(jev.estimate(rows, predictions, config), indent=2))
+            return
+        with credential_environment(config.get("api_key_env", "JEV_API_KEY"), keychain):
+            jev.run(rows, predictions, config, args.output)
+        print(args.output / "judgments.jsonl")
+        return
     indexed = {p["id"]: p for p in predictions}
     requests = [
         {
@@ -244,7 +267,6 @@ def main(argv=None):
         }
         for r in rows
     ]
-    config = json.loads(args.config.read_text())
     if not args.execute:
         print(
             json.dumps(

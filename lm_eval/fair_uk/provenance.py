@@ -57,7 +57,8 @@ def model_identity(model_args):
 def code_identity():
     """Fingerprint toolkit source and the harness interfaces used by this runner."""
     root = Path(__file__).parent.parent
-    paths = [*sorted((root / "fair_uk").glob("*.py")), root / "fair_uk/datasets.json"]
+    # Subpackages (fair_uk/warbias) are part of the toolkit identity.
+    paths = [*sorted((root / "fair_uk").rglob("*.py")), root / "fair_uk/datasets.json"]
     paths += [
         root / name
         for name in (

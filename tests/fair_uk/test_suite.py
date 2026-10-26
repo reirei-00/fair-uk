@@ -56,7 +56,10 @@ def test_default_suite_is_offline_and_does_not_echo_credentials(
     assert not output.exists()
 
 
-def test_suite_routes_every_task_and_summary_without_inference(tmp_path, monkeypatch):
+@pytest.mark.parametrize("prompt_format", ["raw", "native-chat"])
+def test_suite_routes_every_task_and_summary_without_inference(
+    tmp_path, monkeypatch, prompt_format
+):
     calls = []
     identities = []
     monkeypatch.setattr("lm_eval.fair_uk.provenance.model_identity", identities.append)
@@ -96,6 +99,8 @@ def test_suite_routes_every_task_and_summary_without_inference(tmp_path, monkeyp
             "2",
             "--answer-policy",
             "strict_abc_v1",
+            "--generation-prompt-format",
+            prompt_format,
         ]
     )
     assert identities == ["pretrained=pinned-model"]
@@ -105,6 +110,18 @@ def test_suite_routes_every_task_and_summary_without_inference(tmp_path, monkeyp
         assert command[command.index("--output") + 1] == str(tmp_path / task)
         assert command[command.index("--answer-policy") + 1] == "strict_abc_v1"
         assert command[command.index("--limit-clusters-per-stratum") + 1] == "2"
+        if prompt_format == "native-chat":
+            assert (
+                command[command.index("--generation-prompt-format") + 1]
+                == prompt_format
+            )
+        else:
+            assert "--generation-prompt-format" not in command
+    identity = json.loads((tmp_path / "suite.json").read_text())["identity"]
+    if prompt_format == "native-chat":
+        assert identity["generation_prompt_format"] == prompt_format
+    else:
+        assert "generation_prompt_format" not in identity
     assert calls[-1][3] == "summarize"
     calls.clear()
     main(
@@ -122,9 +139,50 @@ def test_suite_routes_every_task_and_summary_without_inference(tmp_path, monkeyp
             "2",
             "--answer-policy",
             "strict_abc_v1",
+            "--generation-prompt-format",
+            prompt_format,
         ]
     )
     assert [command[3] for command in calls] == ["compare", "summarize"]
+    with pytest.raises(ValueError, match="Suite configuration changed"):
+        main(
+            [
+                "suite",
+                "--execute",
+                "--tasks",
+                "warbias_uk",
+                "warbias_en",
+                "--model-args",
+                "pretrained=pinned-model",
+                "--output",
+                str(tmp_path),
+                "--limit-clusters-per-stratum",
+                "2",
+                "--answer-policy",
+                "strict_abc_v1",
+                "--generation-prompt-format",
+                "raw" if prompt_format == "native-chat" else "native-chat",
+            ]
+        )
+
+
+def test_api_suite_rejects_checkpoint_chat_template_option(monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid chat protocol must not execute")
+
+    monkeypatch.setattr("lm_eval.fair_uk.suite._run_child", forbidden)
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "suite",
+                "--model",
+                "api",
+                "--tasks",
+                "warbias_en",
+                "--generation-prompt-format",
+                "native-chat",
+            ]
+        )
 
 
 def test_failed_task_stops_suite_without_leaking_arguments(
