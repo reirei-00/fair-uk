@@ -14,6 +14,8 @@ Two kinds of preference are derived:
   2019). The predicate's wording and length are shared by x and x0 and cancel.
 """
 
+import math
+
 from lm_eval.fair_uk.warbias.schema import LENGTH_SCORINGS, TripletItem
 
 
@@ -22,21 +24,50 @@ def _require(condition, message):
         raise ValueError(message)
 
 
-def summed_logprobs(prediction):
-    scores, tokens = prediction.get("scores"), prediction.get("token_counts")
+def _finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _scores(prediction):
+    scores = prediction.get("scores")
     _require(
-        scores is not None and tokens is not None and len(scores) == len(tokens) == 3,
-        f"{prediction.get('id')}: three scores and token counts are required",
+        isinstance(scores, (tuple, list))
+        and len(scores) == 3
+        and all(_finite_number(score) for score in scores),
+        f"{prediction.get('id')}: three scores must be finite numbers",
     )
-    return [m * n for m, n in zip(scores, tokens, strict=True)]
+    return scores
+
+
+def summed_logprobs(prediction):
+    scores, tokens = _scores(prediction), prediction.get("token_counts")
+    _require(
+        isinstance(tokens, (tuple, list))
+        and len(tokens) == 3
+        and all(type(count) is int and count > 0 for count in tokens),
+        f"{prediction.get('id')}: three positive integer token counts are required",
+    )
+    try:
+        total = [mean * count for mean, count in zip(scores, tokens, strict=True)]
+    except OverflowError as error:
+        raise ValueError("Summed log-probabilities must be finite") from error
+    _require(
+        all(_finite_number(value) for value in total),
+        "Summed log-probabilities must be finite",
+    )
+    return total
 
 
 def sentence_scores(prediction, sentences, scoring):
     """Three sentence scores under one length normalisation."""
     _require(scoring in LENGTH_SCORINGS, f"Unknown scoring {scoring}")
     if scoring == "per_token":
-        _require(len(prediction.get("scores") or ()) == 3, "Three scores are required")
-        return list(prediction["scores"])
+        return list(_scores(prediction))
     total = summed_logprobs(prediction)
     if scoring == "sum":
         return total

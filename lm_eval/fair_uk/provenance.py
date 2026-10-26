@@ -75,6 +75,41 @@ def code_identity():
     }
 
 
+def fixed_inference_settings(run):
+    """Settings shared by phases, languages and original/neutral likelihoods.
+
+    Input fingerprints and row counts deliberately differ between these runs.
+    Historical manifests may lack tokenizer evidence; keep that absence explicit
+    rather than equating it to a recorded fingerprint.
+    """
+    assets = run.get("evaluation_asset_identity")
+    tokenizer = {"status": "not_recorded"}
+    if assets is not None:
+        digest = assets.get("tokenizer_sha256") if isinstance(assets, dict) else None
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError(
+                "Recorded tokenizer evidence requires a SHA256 fingerprint"
+            )
+        tokenizer = {"status": "recorded", "sha256": digest}
+    return {
+        "tokenizer_identity": tokenizer,
+        **{
+            key: run.get(key)
+            for key in (
+                "model_backend",
+                "protocol",
+                "seed",
+                "batch_size",
+                "runtime_versions",
+                "harness_version",
+                "version",
+                "generation_config",
+                "scoring_policy",
+            )
+        },
+    }
+
+
 def paired_inference_settings(run):
     """Project fixed inference settings while allowing checkpoint weights to change.
 
@@ -106,6 +141,7 @@ def paired_inference_settings(run):
         "fair_uk/__main__.py",
     }
     return {
+        **fixed_inference_settings(run),
         "model_arguments_without_checkpoint": {
             key: value
             for key, value in arguments.items()
@@ -116,19 +152,5 @@ def paired_inference_settings(run):
             for key, value in (run.get("code_identity") or {}).items()
             if key in inference_modules or not key.startswith("fair_uk/")
         },
-        **{
-            key: run.get(key)
-            for key in (
-                "model_backend",
-                "protocol",
-                "seed",
-                "batch_size",
-                "runtime_versions",
-                "harness_version",
-                "version",
-                "generation_config",
-                "scoring_policy",
-                "evaluation_asset_identity",
-            )
-        },
+        "evaluation_asset_identity": assets,
     }

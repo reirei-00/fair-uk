@@ -3,6 +3,7 @@
 import pytest
 
 from lm_eval.fair_uk.warbias.detection import scoring_variants_report
+from lm_eval.fair_uk.warbias.schema import LENGTH_SCORINGS
 from lm_eval.fair_uk.warbias.scoring import (
     lms,
     prior_normalised_items,
@@ -83,3 +84,24 @@ def test_prior_normalised_preference_cancels_shared_wording():
     assert item.lms_per_token == 1.0
     with pytest.raises(ValueError, match="cover exactly"):
         prior_normalised_items(rows, predictions, neutral_rows, [])
+
+
+@pytest.mark.parametrize("count", [0, -1, True, 1.5, float("nan"), float("inf")])
+def test_summed_logprobs_requires_positive_integer_token_counts(count):
+    with pytest.raises(ValueError, match="positive integer token counts"):
+        summed_logprobs(
+            {"id": "bad", "scores": [-1.0, -2.0, -3.0], "token_counts": [count, 1, 1]}
+        )
+
+
+@pytest.mark.parametrize("score", [True, None, "-1", float("nan"), float("inf")])
+def test_likelihood_scores_must_be_finite_numbers(score):
+    prediction = {"id": "bad", "scores": [score, -2.0, -3.0], "token_counts": [1, 1, 1]}
+    for scoring in LENGTH_SCORINGS:
+        with pytest.raises(ValueError, match="finite numbers"):
+            sentence_scores(prediction, ["S", "C", "U"], scoring)
+
+
+def test_summed_logprobs_rejects_nonfinite_reconstruction():
+    with pytest.raises(ValueError, match="must be finite"):
+        summed_logprobs({"scores": [-1e308, -2.0, -3.0], "token_counts": [2, 1, 1]})
