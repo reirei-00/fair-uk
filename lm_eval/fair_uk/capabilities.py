@@ -18,6 +18,7 @@ BENCHMARKS = {
     },
 }
 DEFAULT_BENCHMARKS = tuple(BENCHMARKS)
+BENCHMARKS["winopron"] = {"uk": "winopron_uk"}
 BENCHMARKS.update(
     {
         name: {language: f"{name}_{language}" for language in ("uk", "en")}
@@ -46,7 +47,7 @@ def task_metadata(task):
         "benchmark": benchmark(task),
         "protocol": PROTOCOLS[kind],
         "required_capability": "generate_text"
-        if kind in ("warbias", "warbias_benign")
+        if kind in ("warbias", "warbias_benign", "winopron_uk")
         else "score_tokens",
         "requests_per_row": {
             "warbias": 1,
@@ -56,9 +57,10 @@ def task_metadata(task):
             "stereoset_uk": 3,
             "winobias_uk_natural": 2,
             "winobias_uk_controlled": 2,
+            "winopron_uk": 1,
         }[kind],
         "counterpart": next(
-            t for t in BENCHMARKS[benchmark(task)].values() if t != task
+            (t for t in BENCHMARKS[benchmark(task)].values() if t != task), None
         ),
     }
 
@@ -80,9 +82,12 @@ def resolve_tasks(registry, tasks=None, languages=None, benchmarks=None):
         )
         if len(names) != len(set(names)):
             raise ValueError("Select each benchmark only once")
-        selected = [
-            BENCHMARKS[name][lang] for name in names for lang in (languages or ["uk"])
-        ]
+        selected = []
+        for name in names:
+            for lang in languages or ["uk"]:
+                if lang not in BENCHMARKS[name]:
+                    raise ValueError(f"{name}: no published {lang} task")
+                selected.append(BENCHMARKS[name][lang])
     missing = [task for task in selected if task not in registry]
     return selected, missing
 
@@ -90,6 +95,10 @@ def resolve_tasks(registry, tasks=None, languages=None, benchmarks=None):
 def validate_backend(tasks, backend):
     if backend not in ("hf", "vllm", "api"):
         raise ValueError("Choose a supported backend interface: hf, vllm or api")
+    if backend == "api" and any(family(task) == "winopron_uk" for task in tasks):
+        raise ValueError(
+            "WinoPron currently requires checkpoint generation; its hosted API protocol is not integrated"
+        )
     unsupported = [
         task
         for task in tasks

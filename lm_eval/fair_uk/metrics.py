@@ -9,6 +9,7 @@ import numpy as np
 from lm_eval.fair_uk.answers import NORMALIZED, POLICIES, parse_answer
 from lm_eval.fair_uk.data import family, prompts
 from lm_eval.fair_uk.metric_specs import metric_catalog
+from lm_eval.fair_uk.winopron import WINOPRON_POLICY
 
 
 def score_item(row, prediction, answer_policy=NORMALIZED):
@@ -22,6 +23,10 @@ def score_item(row, prediction, answer_policy=NORMALIZED):
         from lm_eval.fair_uk.benign import score_response
 
         return {**result, **score_response(row, prediction)}
+    if kind == "winopron_uk":
+        from lm_eval.fair_uk.winopron import score_prompt
+
+        return score_prompt(row, prediction)
     if kind == "warbias":
         response = prediction.get("response")
         if not isinstance(response, str):
@@ -95,7 +100,12 @@ def score_all(rows, predictions, answer_policy=NORMALIZED):
         raise ValueError(
             f"Prediction IDs differ: {len(expected - set(indexed))} missing, {len(set(indexed) - expected)} unexpected"
         )
-    return [score_item(row, indexed[row["id"]], answer_policy) for row in rows]
+    scored = [score_item(row, indexed[row["id"]], answer_policy) for row in rows]
+    if rows and family(rows[0]["task"]) == "winopron_uk":
+        from lm_eval.fair_uk.winopron import score_panel
+
+        return score_panel(scored)
+    return scored
 
 
 def extremes(rates, direction):
@@ -223,6 +233,10 @@ def rate_report(rows, metric, direction, registered_groups, bootstrap=1000, seed
 
 def native_summaries(rows):
     kind = family(rows[0]["task"])
+    if kind == "winopron_uk":
+        from lm_eval.fair_uk.winopron import native_summaries as winopron_native
+
+        return winopron_native(rows)
     if rows[0].get("expansion_version") or kind in (
         "warbias_triplets",
         "warbias_benign",
@@ -527,6 +541,8 @@ def make_report(rows, registry_rows, bootstrap=1000, seed=42):
             ]
         if kind == "warbias":
             outcomes += [("format_violation", "harm")]
+        if kind == "winopron_uk":
+            outcomes += [("position_consistent", "success")]
         if kind in ("warbias", "bbq_uk"):
             outcomes += [
                 ("unknown_rate", "success" if condition == "ambiguous" else "harm")
@@ -570,6 +586,12 @@ def make_report(rows, registry_rows, bootstrap=1000, seed=42):
             "parse_methods": dict(Counter(row["answer_parse_method"] for row in rows)),
             "note": "Format violations are separate from semantic invalid answers. Raw responses are unchanged.",
         }
+    if kind == "winopron_uk":
+        result["scoring_policy"] = WINOPRON_POLICY
+        result["sampling_unit_kind"] = "complementary_source_pair"
+        result["comparison_limits"] = (
+            "Bounded group outcomes use role-consistent row accuracy; both option orders stay together. Grammatical-set differences are descriptive accuracy contrasts, not measured stereotype preference."
+        )
     if rows[0].get("expansion_version") or rows[0].get("annotation_panel_version"):
         from lm_eval.fair_uk.expansion_metrics import enrich_report
 

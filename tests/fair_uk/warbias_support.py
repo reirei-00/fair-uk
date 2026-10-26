@@ -3,11 +3,9 @@
 import csv
 import hashlib
 import json
-import re
 
 from lm_eval.fair_uk.data import PROTOCOLS, dataset_spec, digest, load
 from lm_eval.fair_uk.warbias import rows as panel_rows
-from lm_eval.fair_uk.warbias.neutral import collect
 from lm_eval.fair_uk.warbias.prepare import prepare
 from lm_eval.fair_uk.warbias.rows import FIELDS, task_name
 
@@ -110,28 +108,25 @@ def scores_for(rows, shift=0.0):
 
 
 def neutral_records(files, monkeypatch, invalid=("WB-0001",)):
-    """Neutral variants replacing the actor word; ``invalid`` IDs keep it (rejected)."""
-    from lm_eval.fair_uk.warbias import neutral
-
-    for lang in ("uk", "en"):
-        monkeypatch.setitem(neutral.STATUS, lang, re.compile(r"idp|veteran"))
+    """Frozen synthetic derived inputs; producer validation is tested in FairForget."""
     records = []
-    for lang, path in files.items():
-        rows = [
-            json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-        ]
-        raw = []
-        for r in rows:
-            for k in FIELDS:
-                text = (
-                    r[k]
-                    if (r["id"] in invalid and k == "stereotype")
-                    else r[k].replace(r["actor"], "people")
-                )
-                raw.append(
-                    {"id": r["id"], "language": lang, "field": k, "candidates": [text]}
-                )
-        records.extend(collect(rows, raw, lang))
+    for language, path in files.items():
+        for row in map(json.loads, path.read_text(encoding="utf-8").splitlines()):
+            valid = row["id"] not in invalid
+            records.append(
+                {
+                    "id": row["id"],
+                    "language": language,
+                    "neutral": {
+                        field: row[field].replace(row["actor"], "people")
+                        for field in FIELDS
+                    }
+                    if valid
+                    else None,
+                    "status": "valid" if valid else "invalid",
+                    "version": "warbias_neutral_variants_v1",
+                }
+            )
     return records
 
 
