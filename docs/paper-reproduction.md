@@ -1,11 +1,13 @@
 # Paper reproduction
 
 Fair-UK owns evaluation inputs, model inference, response judging, scoring and
-paper tables. FairForget owns WarBias construction, translation, linguistic
-review and unlearning. Both repositories have reusable Python modules, command
-entry points, tests and thin notebooks. Install the paired Fair-UK checkout
-before installing FairForget; the upstream `lm_eval` package alone does not
-provide these study interfaces.
+paper tables. FairForget is the broader project repository; its `warbias/`
+subproject owns WarBias construction, translation, linguistic review and
+unlearning pipelines. The subproject has reusable Python modules, command entry
+points, tests and thin notebooks. Install the paired Fair-UK checkout before
+installing `fairforget-warbias` from that directory; the upstream `lm_eval`
+package alone does not provide these study interfaces. Other FairForget
+benchmark workflows and their root dependencies remain separate.
 
 ## Frozen evaluation inputs
 
@@ -121,7 +123,8 @@ paired adapter; their original provenance is preserved.
 
 `notebooks/paper/before_after_evaluation.ipynb` demonstrates the public scoring
 API using explicitly synthetic records, including a no-update assertion. The
-FairForget notebooks demonstrate construction, translation and a tiny CPU
+WarBias subproject notebooks (`warbias/notebooks/paper/` in FairForget) demonstrate
+construction, translation and a tiny CPU
 optimizer step. They are executable software checks, never paper measurements.
 
 ```sh
