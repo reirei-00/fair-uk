@@ -3,7 +3,7 @@
 Code: `lm_eval/fair_uk/warbias/`. Command: `fair-uk-eval warbias <command>`.
 The pipeline measures stereotype preference on the annotated WarBias triplet
 panel (UK and EN) from saved sentence likelihoods. It consumes frozen evaluation inputs. WarBias creation, translation, neutral
-rewriting and case annotation are maintained in the `warbias/` subproject of the
+rewriting and data review are maintained in the `warbias/` subproject of the
 separate FairForget repository. See [the paper workflow](paper-reproduction.md) for the repository
 handoff and before/after evaluation.
 
@@ -182,8 +182,8 @@ python scripts/export_warbias_submission.py build --output ../../warbias-paper-a
 python scripts/export_warbias_submission.py verify --directory ../../warbias-paper-artifact
 ```
 
-The exporter packages source, required evaluator interfaces, tests, this guide,
-a credential-free judge example and the upstream license. It excludes unrelated
+The exporter packages source, required evaluator interfaces, tests, this guide
+and the upstream license. It excludes unrelated
 benchmark task collections, result files, caches, local configuration and Git
 history. The destination must not exist; use a new version when refreshing an
 artifact so previous snapshots retain their identities.
