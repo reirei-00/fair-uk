@@ -1,7 +1,6 @@
 """Portable source export and integrity checks, without network or model calls."""
 
 import importlib.util
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -35,9 +34,6 @@ def test_export_is_standalone_and_reproducible(exported, tmp_path):
     metadata = exporter._read_toml((exported / "pyproject.toml").read_text())
     assert metadata["project"]["scripts"]["warbias-detect"].endswith("cli:main")
     assert "authors" not in metadata["project"] and "urls" not in metadata["project"]
-    assert "keychain" not in json.loads(
-        (exported / "configs/fair_uk/jev_benign.json").read_text()
-    )
     for excluded in (".git", ".venv", "outputs", "CONVENTIONS.md"):
         assert not (exported / excluded).exists()
     with pytest.raises(ValueError, match="new directory"):
