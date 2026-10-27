@@ -41,6 +41,28 @@ def model_label(report):
     return "external predictions (model unverified)"
 
 
+def native_scope(record):
+    """Preserve every native slice label, including coreference/profile axes."""
+    return " / ".join(
+        str(record[key])
+        for key in (
+            "scope",
+            "stratum",
+            "condition",
+            "context",
+            "status",
+            "category",
+            "group",
+            "pronoun_type",
+            "pronoun_set",
+            "actor",
+            "gender",
+            "age",
+        )
+        if key in record
+    )
+
+
 def native_entries(report):
     specs = {m["id"]: m for m in metric_catalog(report["task"])["metrics"]}
     counts = {
@@ -57,11 +79,7 @@ def native_entries(report):
         "unscorable_rows",
     }
     for record in report["native"]:
-        scope = " / ".join(
-            str(record[k])
-            for k in ("scope", "stratum", "condition", "status", "category", "group")
-            if k in record
-        )
+        scope = native_scope(record)
         for metric, value in record.items():
             if isinstance(value, bool):
                 continue

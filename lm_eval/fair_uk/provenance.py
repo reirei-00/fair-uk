@@ -108,3 +108,49 @@ def fixed_inference_settings(run):
             )
         },
     }
+
+
+def paired_inference_settings(run):
+    """Project fixed inference settings while allowing checkpoint weights to change.
+
+    Effective tokenizer/input evidence must come from collection with the loaded
+    backend. Missing historical evidence is rejected, never manufactured here.
+    """
+    assets = run.get("evaluation_asset_identity")
+    if not isinstance(assets, dict) or any(
+        not isinstance(assets.get(key), str)
+        or re.fullmatch(r"[0-9a-f]{64}", assets[key]) is None
+        for key in ("tokenizer_sha256", "input_sha256")
+    ):
+        raise ValueError(
+            "Paired evaluation requires tokenizer and effective-input fingerprints"
+        )
+    if run.get("model_args"):
+        arguments = simple_parse_args_string(run["model_args"])
+    else:
+        # The collector deliberately stores only safe parsed parameters; raw
+        # invocations can contain credentials and must not be copied to reports.
+        arguments = (run.get("model_identity") or {}).get("parameters")
+        if not isinstance(arguments, dict) or not arguments.get("pretrained"):
+            raise ValueError("Paired evaluation requires recorded model parameters")
+    inference_modules = {
+        "fair_uk/runner.py",
+        "fair_uk/data.py",
+        "fair_uk/provenance.py",
+        "fair_uk/evaluation_assets.py",
+        "fair_uk/__main__.py",
+    }
+    return {
+        **fixed_inference_settings(run),
+        "model_arguments_without_checkpoint": {
+            key: value
+            for key, value in arguments.items()
+            if key not in ("pretrained", "revision")
+        },
+        "inference_code": {
+            key: value
+            for key, value in (run.get("code_identity") or {}).items()
+            if key in inference_modules or not key.startswith("fair_uk/")
+        },
+        "evaluation_asset_identity": assets,
+    }

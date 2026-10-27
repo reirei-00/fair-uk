@@ -2,7 +2,10 @@
 
 Code: `lm_eval/fair_uk/warbias/`. Command: `fair-uk-eval warbias <command>`.
 The pipeline measures stereotype preference on the annotated WarBias triplet
-panel (UK and EN) from saved sentence likelihoods. Only `neutral-generate` runs model inference on the cluster.
+panel (UK and EN) from saved sentence likelihoods. It consumes frozen evaluation inputs. WarBias creation, translation, neutral
+rewriting and data review are maintained in the `warbias/` subproject of the
+separate FairForget repository. See [the paper workflow](paper-reproduction.md) for the repository
+handoff and before/after evaluation.
 
 ## Installation
 
@@ -47,7 +50,6 @@ tau record (development only)      baseline_long.csv, baseline_tables.md,
 | `schema.py` | Controlled vocabulary (actors, genders, ages, axes, `not_stated`) and `TripletItem`, the record every analysis consumes |
 | `rows.py` | Pinned source, the adapted panel row and its validation (used by the data layer) |
 | `prepare.py` | Bundle building: inventory binding, case-split checks, ID restriction and aliases, neutral tasks, manifest |
-| `neutral.py` | Neutral-group variants: generation prompts (cluster) and validation rules |
 | `panel.py` | WarBias phase/full-panel matching and report assembly from verified runs |
 | `../runs.py` | One prediction read and validation owner; `VerifiedRun` binds inputs, predictions, scores and provenance |
 | `scoring.py` | Saved likelihoods → `TripletItem`: raw length scorings and the prior-normalised preference |
@@ -57,6 +59,7 @@ tau record (development only)      baseline_long.csv, baseline_tables.md,
 | `calibration.py` | The tau and minimum-support decision rules |
 | `report_schema.py` | Pure validation and read-only normalization of saved detection reports |
 | `tables.py` | Paper tables rendered from normalized reports (no recomputation) |
+| `intervention.py` | Verified original+neutral before/after effects, component uncertainty and qualified dependent metrics |
 
 `aggregate.py` and `stats.py` are scoring-agnostic: they read one per-item field
 (`preference`, `lms_per_byte`, …). A new scoring protocol (for example forced
@@ -70,10 +73,6 @@ analysis then applies unchanged, with abstentions as `preference=None`.
 fair-uk-eval warbias prepare --uk uk.jsonl --en en.jsonl --inventory inventory.jsonl \
   --case-splits case_splits.csv --ids annotated_ids.txt --aliases workbook_aliases.csv \
   --neutral neutral_variants.jsonl --split all --output bundles/all
-
-# 2. Neutral variants (cluster generation, then offline validation)
-fair-uk-eval warbias neutral-generate --uk uk.jsonl --en en.jsonl --model-path MODEL --output raw/
-fair-uk-eval warbias neutral-collect --uk uk.jsonl --en en.jsonl --raw-dir raw/ --output neutral_variants.jsonl
 
 # 3. Panel report for one checkpoint (one --run / --neutral-run per language and phase)
 fair-uk-eval warbias report --full-bundle bundles/all/manifest.json \

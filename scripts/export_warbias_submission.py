@@ -24,7 +24,8 @@ SOURCE_SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 README = """# WarBias paper artifact
 
 Standalone source for the WarBias detection pipeline and its evaluator support.
-Start with the [reproduction guide](docs/warbias-detection.md) for installation,
+Start with the [paper workflow](docs/paper-reproduction.md) and
+[WarBias guide](docs/warbias-detection.md) for installation,
 input requirements, commands, metric definitions and anonymous-release notes.
 
 - `src/lm_eval/`: pipeline and reusable evaluator interfaces.
@@ -195,9 +196,12 @@ def export(source, output):
         )
         _copy_tree(source / "tests/fair_uk", staging / "tests/fair_uk")
         _copy_tree(source / "data/paper", staging / "data/paper")
+        _copy_tree(source / "notebooks/paper", staging / "notebooks/paper")
+        _copy_tree(source / "configs/paper", staging / "configs/paper")
         for relative in (
             "tests/conftest.py",
             "docs/warbias-detection.md",
+            "docs/paper-reproduction.md",
             "LICENSE.md",
         ):
             _copy_file(source / relative, staging / relative)

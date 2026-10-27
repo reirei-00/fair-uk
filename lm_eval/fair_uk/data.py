@@ -11,6 +11,7 @@ from lm_eval.fair_uk.warbias.rows import (
     PROTOCOL as WARBIAS_TRIPLET_PROTOCOL,
     validate_adapted_row as validate_panel_row,
 )
+from lm_eval.fair_uk.winopron import PROTOCOL as WINOPRON_PROTOCOL
 
 
 REGISTRY = json.loads(Path(__file__).with_name("datasets.json").read_text())
@@ -22,6 +23,7 @@ PROTOCOLS = {
     "stereoset_uk": "causal_full_sentence_mean_token_logprob_v1",
     "winobias_uk_natural": "counterbalanced_ab_mean_token_logprob_v1",
     "winobias_uk_controlled": "fixed_ab_mean_token_logprob_v1",
+    "winopron_uk": WINOPRON_PROTOCOL,
 }
 
 
@@ -120,7 +122,11 @@ def load(task, path=None, dataset_bundle=None, *, bundle=None):
         )
     if len(raw) != spec["rows"]:
         raise ValueError(f"{task}: unexpected row count")
-    rows = raw if prepared else [adapt(task, row) for row in raw]
+    rows = (
+        raw
+        if prepared
+        else [adapt(task, row, language=spec["language"]) for row in raw]
+    )
     if prepared and any(
         row.get("task") != task
         or row.get("language") != spec["language"]
@@ -131,37 +137,68 @@ def load(task, path=None, dataset_bundle=None, *, bundle=None):
         raise ValueError(f"{task}: bundle row identity differs from its specification")
     if prepared:
         pairing = spec.get("pairing")
-        if not pairing or task not in (pairing["uk_task"], pairing["en_task"]):
-            raise ValueError(f"{task}: missing bundle pairing contract")
-        mapping_path = _bundle_path(Path(dataset_bundle).parent, pairing["filename"])
-        if digest(mapping_path) != pairing["sha256"]:
-            raise ValueError(f"{task}: pairing map checksum differs from the bundle")
-        mapping = [json.loads(line) for line in mapping_path.read_text().splitlines()]
-        language_ids = [r[f"{spec['language']}_id"] for r in mapping]
-        declared = [r["id"] for r in rows if r["paired_eligible"]]
-        if (
-            len(mapping) != pairing["matched_rows"]
-            or len(set(language_ids)) != len(language_ids)
-            or set(language_ids) != set(declared)
+        if not isinstance(pairing, dict) or pairing.get("mode") not in (
+            None,
+            "mapped",
+            "unpaired",
         ):
-            raise ValueError(
-                f"{task}: paired source IDs differ from the bundle mapping"
+            raise ValueError(f"{task}: missing or unsupported bundle pairing contract")
+        if pairing.get("mode") == "unpaired":
+            if (
+                not isinstance(pairing.get("reason"), str)
+                or not pairing["reason"].strip()
+            ):
+                raise ValueError(
+                    f"{task}: unpaired bundle requires an exclusion reason"
+                )
+            if any(
+                row["paired_eligible"]
+                or not isinstance(row.get("pairing_exclusion_reason"), str)
+                or not row["pairing_exclusion_reason"].strip()
+                for row in rows
+            ):
+                raise ValueError(f"{task}: unpaired rows must declare their exclusion")
+        else:
+            if not pairing or task not in (pairing["uk_task"], pairing["en_task"]):
+                raise ValueError(f"{task}: missing bundle pairing contract")
+            mapping_path = _bundle_path(
+                Path(dataset_bundle).parent, pairing["filename"]
             )
-        excluded = [r for r in rows if not r["paired_eligible"]]
-        if len(excluded) != (
-            pairing["excluded_uk_rows"] if spec["language"] == "uk" else 0
-        ) or any(not r.get("pairing_exclusion_reason") for r in excluded):
-            raise ValueError(f"{task}: undocumented pairing exclusions")
+            if digest(mapping_path) != pairing["sha256"]:
+                raise ValueError(
+                    f"{task}: pairing map checksum differs from the bundle"
+                )
+            mapping = [
+                json.loads(line) for line in mapping_path.read_text().splitlines()
+            ]
+            language_ids = [r[f"{spec['language']}_id"] for r in mapping]
+            declared = [r["id"] for r in rows if r["paired_eligible"]]
+            if (
+                len(mapping) != pairing["matched_rows"]
+                or len(set(language_ids)) != len(language_ids)
+                or set(language_ids) != set(declared)
+            ):
+                raise ValueError(
+                    f"{task}: paired source IDs differ from the bundle mapping"
+                )
+            excluded = [r for r in rows if not r["paired_eligible"]]
+            if len(excluded) != (
+                pairing["excluded_uk_rows"] if spec["language"] == "uk" else 0
+            ) or any(not r.get("pairing_exclusion_reason") for r in excluded):
+                raise ValueError(f"{task}: undocumented pairing exclusions")
     validate(rows)
     return rows
 
 
-def adapt(task, row):
+def adapt(task, row, language=None):
     kind = family(task)
+    language = language or REGISTRY.get(task, {}).get("language")
+    if language not in ("uk", "en"):
+        raise ValueError("An unregistered native task requires an explicit language")
     out = {
         "task": task,
         "protocol": PROTOCOLS[kind],
-        "language": REGISTRY[task]["language"],
+        "language": language,
         "source": row,
     }
     if kind == "warbias":
@@ -204,23 +241,44 @@ def adapt(task, row):
             eligible=eligible,
         )
     elif kind == "stereoset_uk":
-        if "[BLANK]" not in row["template_uk"]:
-            raise ValueError("StereoSet template has no mask")
+        template = row.get(f"template_{language}")
+        if template is not None:
+            if "[BLANK]" not in template:
+                raise ValueError("StereoSet template has no mask")
+            sentences = [
+                template.replace("[BLANK]", row[f"{label}_fill_{language}"])
+                for label in ("stereotype", "anti_stereotype", "unrelated")
+            ]
+        else:
+            sentences = [
+                row[f"{role}_{language}"] for role in ("forget", "retain", "control")
+            ]
+        target = row.get(f"target_{language}", row.get("target_uk"))
+        category = row.get(f"bias_type_{language}", row.get("bias_type_uk"))
+        if (
+            not target
+            or not category
+            or not all(isinstance(s, str) and s for s in sentences)
+        ):
+            raise ValueError(
+                "StereoSet requires full semantic triplets and target/category metadata"
+            )
         out.update(
             id=row["item_id"],
             cluster=row["item_id"],
-            stratum=row["target_uk"],
+            stratum=target,
             panel=row["item_id"],
-            group=row["target_uk"],
+            group=target,
             group_kind="lexical_target",
             condition="intrasentence",
-            category=row["bias_type_uk"],
+            category=category,
             eligible=True,
-            sentences=[
-                row["template_uk"].replace("[BLANK]", row[f"{label}_fill_uk"])
-                for label in ("stereotype", "anti_stereotype", "unrelated")
-            ],
+            sentences=sentences,
         )
+    elif kind == "winopron_uk":
+        from lm_eval.fair_uk.winopron import adapt_row
+
+        return adapt_row(task, row, language=language)
     else:
         cluster = f"{row['split']}/{row['type']}/{row['item_number']}"
         natural = kind.endswith("natural")
@@ -280,6 +338,10 @@ def validate(rows):
         if row.get("annotation_panel_version"):
             validate_panel_row(row)
     kind = family(rows[0]["task"])
+    if kind == "winopron_uk":
+        from lm_eval.fair_uk.winopron import validate_rows
+
+        validate_rows(rows)
     panels = defaultdict(list)
     for row in rows:
         panels[row["panel"]].append(row)
@@ -338,6 +400,8 @@ def prompts(row):
         ]
     if kind == "warbias_benign":
         return [{"context": source["prompt"]}]
+    if kind == "winopron_uk":
+        return [{"context": source["prompt_uk"]}]
     if kind == "warbias":
         uk = row["language"] == "uk"
         instruction = (

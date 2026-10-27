@@ -1,20 +1,18 @@
 """``fair-uk-eval warbias``: the WarBias detection pipeline from the command line.
 
 prepare           build the pinned panel bundle (optionally with neutral variants)
-neutral-generate  cluster: generate raw neutral-group variants (vLLM)
-neutral-collect   validate raw variants into neutral-variant records
 report            whole-panel report for one checkpoint from saved phase runs
 calibrate         tau on prior-normalised development margins from a report
 tables            paper tables from a directory of panel reports
+compare           paired checkpoint effects using original + neutral runs
 
-
+WarBias creation, translation, neutral rewriting and data review live in
+the FairForget producer repository. Fair-UK consumes their frozen releases.
 """
 
 import argparse
-import json
 from pathlib import Path
 
-from lm_eval.fair_uk.warbias import neutral
 from lm_eval.fair_uk.warbias.calibration import development_tau
 from lm_eval.fair_uk.warbias.files import read_pairs, read_rows, write_json
 from lm_eval.fair_uk.warbias.panel import panel_report
@@ -60,19 +58,6 @@ def _parser():
     )
     build.add_argument("--case-splits", type=Path, help="Published case_splits.csv")
     build.add_argument("--neutral", type=Path, help="Neutral-variant records (JSONL)")
-
-    gen = commands.add_parser(
-        "neutral-generate", help="Cluster: generate raw neutral variants"
-    )
-    collect = commands.add_parser(
-        "neutral-collect", help="Validate raw neutral variants"
-    )
-    for sub in (gen, collect):
-        sub.add_argument("--uk", type=Path, required=True)
-        sub.add_argument("--en", type=Path, required=True)
-        sub.add_argument("--output", type=Path, required=True)
-    gen.add_argument("--model-path", required=True)
-    collect.add_argument("--raw-dir", type=Path, required=True)
 
     report = commands.add_parser("report", help="Whole-panel report from phase runs")
     report.add_argument("--full-bundle", type=Path, required=True)
@@ -140,15 +125,6 @@ def main(argv=None):
             case_splits=args.case_splits,
             neutral=None if args.neutral is None else read_rows(args.neutral),
         )
-    elif args.command == "neutral-generate":
-        released = {"uk": read_rows(args.uk), "en": read_rows(args.en)}
-        neutral.generate(released, args.model_path, args.output)
-        result = args.output
-    elif args.command == "neutral-collect":
-        released = {"uk": read_rows(args.uk), "en": read_rows(args.en)}
-        result = json.dumps(
-            neutral.collect_all(released, args.raw_dir, args.output), indent=2
-        )
     elif args.command == "report":
         result = panel_report(
             args.full_bundle,
@@ -171,8 +147,6 @@ def main(argv=None):
         result = "\n".join(
             map(str, write_tables(args.results, args.output, args.model))
         )
-    else:
-        raise ValueError("Unknown WarBias command")
     print(result)
 
 
