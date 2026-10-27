@@ -6,7 +6,7 @@ calibrate         tau on prior-normalised development margins from a report
 tables            paper tables from a directory of panel reports
 compare           paired checkpoint effects using original + neutral runs
 
-WarBias creation, translation, neutral rewriting and case annotation live in
+WarBias creation, translation, neutral rewriting and data review live in
 the FairForget producer repository. Fair-UK consumes their frozen releases.
 """
 
