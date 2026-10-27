@@ -12,8 +12,6 @@ Layers, in data-flow order:
 - ``detection``: the detection report assembled from the layers above.
 - ``calibration``: the no-preference band tau and the group-support rule.
 - ``tables``: paper tables rendered from saved reports, without recomputation.
-- ``severity`` / ``harm_mechanisms`` / ``jev_cases``: machine-provisional case
-  annotation with TypeSafe JEV.
 
 Rates are stored in [0, 1] in every JSON output; tables render percentages.
 Margins are in nats.
