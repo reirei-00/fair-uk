@@ -6,21 +6,17 @@ neutral-collect   validate raw variants into neutral-variant records
 report            whole-panel report for one checkpoint from saved phase runs
 calibrate         tau on prior-normalised development margins from a report
 tables            paper tables from a directory of panel reports
-severity          case-level 1-5 (or categorical) severity with TypeSafe JEV
-harm-mechanisms   case-level harm-mechanism coding with TypeSafe JEV
 
-JEV commands preview by default and send requests only with ``--execute``;
-credentials come from the configured environment variable, never from files.
+
 """
 
 import argparse
 import json
 from pathlib import Path
 
-from lm_eval.fair_uk.warbias import harm_mechanisms, neutral, severity
+from lm_eval.fair_uk.warbias import neutral
 from lm_eval.fair_uk.warbias.calibration import development_tau
 from lm_eval.fair_uk.warbias.files import read_pairs, read_rows, write_json
-from lm_eval.fair_uk.warbias.jev_cases import cases_from, load_config
 from lm_eval.fair_uk.warbias.panel import panel_report
 from lm_eval.fair_uk.warbias.prepare import ROLES, prepare
 from lm_eval.fair_uk.warbias.schema import LANGUAGES
@@ -121,19 +117,6 @@ def _parser():
         "--model", action="append", help="Model order (default: all, sorted)"
     )
 
-    for name, module_help in (
-        ("severity", "Case-level severity with JEV"),
-        ("harm-mechanisms", "Case-level harm-mechanism coding with JEV"),
-    ):
-        sub = commands.add_parser(name, help=module_help)
-        sub.add_argument("--case-matrix", type=Path, required=True)
-        sub.add_argument("--uk", type=Path, required=True, help="Released UK triplets")
-        sub.add_argument("--en", type=Path, required=True, help="Released EN triplets")
-        sub.add_argument("--config", type=Path, required=True, help="JEV configuration")
-        sub.add_argument("--output", type=Path, required=True)
-        sub.add_argument("--execute", action="store_true", help="Send requests to JEV")
-        if name == "severity":
-            sub.add_argument("--rubric", choices=severity.RUBRICS, default="scale5")
     return parser
 
 
@@ -189,17 +172,7 @@ def main(argv=None):
             map(str, write_tables(args.results, args.output, args.model))
         )
     else:
-        cases = cases_from(args.case_matrix, args.uk, args.en)
-        config = load_config(args.config)
-        if args.command == "severity":
-            summary = severity.run(
-                cases, config, args.output, execute=args.execute, rubric=args.rubric
-            )
-        else:
-            summary = harm_mechanisms.run(
-                cases, config, args.output, execute=args.execute
-            )
-        result = json.dumps(summary, ensure_ascii=False, indent=2)
+        raise ValueError("Unknown WarBias command")
     print(result)
 
 
