@@ -95,6 +95,25 @@ Answer parsing is versioned separately from generation: `abc_option_text_v2`
 accepts harmless letter punctuation and exact option text; `strict_abc_v1` accepts
 bare letters. Rescoring must retain raw predictions and generation provenance.
 
+## WarBias annotated triplets
+
+The annotated WarBias panel (tasks `warbias_triplets_annotated_*` and their
+neutral-variant counterparts) has its own pipeline, documented with every
+metric definition and the code that computes it in
+[WarBias detection pipeline](warbias-detection.md). In short: the primary
+stereotype score is prior-normalised against neutral-group variants
+(Kurita et al., 2019); raw length scorings and LMS are diagnostics; no ICAT is
+reported because the unrelated sentence is a fluent filler; `not_stated` is a
+reference, never a compared group; gender and age groups use common-content
+panels and actor groups are descriptive.
+
+The generic raw-scoring reports kept in `raw_scoring_diagnostics/` include
+`length_diagnostics`: mean whitespace words per sentence role, SS and LMS on
+`counter_longer`, `within_tolerance` and `stereotype_longer` buckets for
+tolerances 0–3 words, and item-level Spearman correlations of length
+differences with likelihood margins. Buckets are subsets, not length-controlled
+estimates.
+
 ## BBQ
 
 The adaptation averages each candidate's mean-token score across three cyclic

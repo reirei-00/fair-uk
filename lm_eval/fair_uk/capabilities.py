@@ -23,6 +23,8 @@ BENCHMARKS.update(
         name: {language: f"{name}_{language}" for language in ("uk", "en")}
         for name in (
             "warbias_triplets",
+            "warbias_triplets_annotated",
+            "warbias_triplets_annotated_neutral",
             "warbias_cross_actor",
             "warbias_expanded_qa",
             "warbias_benign",

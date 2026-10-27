@@ -215,7 +215,7 @@ Preparation defaults to the frozen **evaluation** split. `--split development`, 
 
 | New track (each has `_uk` and `_en`) | Capability | Native outcomes |
 |---|---|---|
-| `warbias_triplets` | Candidate token scoring | Adapted SS, LMS, ICAT and ties |
+| `warbias_triplets` | Candidate token scoring | Adapted SS, LMS, ICAT and ties (the annotated panel uses its own pipeline without ICAT: [WarBias detection](warbias-detection.md)) |
 | `warbias_cross_actor` | Candidate token scoring | Same formulas on matched actor-swapped claims |
 | `warbias_expanded_qa` | Text generation | Accuracy, stereotype/counter/unknown/invalid rates and evidence gaps |
 | `warbias_benign` | Text generation, then rubric judging | Task success, full/any refusal and judgment coverage |

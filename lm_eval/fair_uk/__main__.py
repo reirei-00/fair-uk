@@ -41,6 +41,10 @@ def main(argv=None):
         from lm_eval.fair_uk.expansion import main as prepare_main
 
         return prepare_main(argv[1:])
+    if argv and argv[0] == "warbias":
+        from lm_eval.fair_uk.warbias.cli import main as warbias_main
+
+        return warbias_main(argv[1:])
     if argv and argv[0] == "judge-benign":
         from lm_eval.fair_uk.benign import main as judge_main
 
@@ -56,6 +60,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("suite", help="Plan or explicitly run a set of bias benchmarks")
+    commands.add_parser(
+        "warbias", help="Prepare and analyze the annotated WarBias triplet panel"
+    )
     commands.add_parser(
         "prepare-warbias", help="Validate and prepare a local draft WarBias expansion"
     )
