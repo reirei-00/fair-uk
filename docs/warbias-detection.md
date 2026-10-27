@@ -2,9 +2,7 @@
 
 Code: `lm_eval/fair_uk/warbias/`. Command: `fair-uk-eval warbias <command>`.
 The pipeline measures stereotype preference on the annotated WarBias triplet
-panel (UK and EN) from saved sentence likelihoods. Nothing in it runs model
-inference except `neutral-generate` (cluster only) and the TypeSafe JEV
-commands with `--execute`.
+panel (UK and EN) from saved sentence likelihoods. Only `neutral-generate` runs model inference on the cluster.
 
 ## Installation
 
@@ -59,8 +57,6 @@ tau record (development only)      baseline_long.csv, baseline_tables.md,
 | `calibration.py` | The tau and minimum-support decision rules |
 | `report_schema.py` | Pure validation and read-only normalization of saved detection reports |
 | `tables.py` | Paper tables rendered from normalized reports (no recomputation) |
-| `jev_cases.py`, `severity.py`, `harm_mechanisms.py` | Machine-provisional case annotation with TypeSafe JEV |
-| `review.py` | Shared CSV review-sheet creation and append-only extension, preserving human edits |
 
 `aggregate.py` and `stats.py` are scoring-agnostic: they read one per-item field
 (`preference`, `lms_per_byte`, …). A new scoring protocol (for example forced
@@ -90,24 +86,7 @@ fair-uk-eval warbias calibrate --dev-bundle bundles/development/manifest.json \
   --panel results/panel_MODEL --model-id MODEL --output decisions/tau_MODEL.json
 fair-uk-eval warbias tables --results results [--model M1 --model M2 ...]
 
-# 5. Case annotation with JEV (preview by default; --execute sends requests)
-fair-uk-eval warbias severity --case-matrix case_matrix.csv --uk uk.jsonl --en en.jsonl \
-  --config configs/fair_uk/jev_benign.json --rubric scale5 --output severity/ [--execute]
-fair-uk-eval warbias harm-mechanisms --case-matrix case_matrix.csv --uk uk.jsonl --en en.jsonl \
-  --config configs/fair_uk/jev_benign.json --output mechanisms/ [--execute]
 ```
-
-JEV credentials come only from the configured environment variable. Saved
-responses are appended as they arrive and validated before saving; a rerun
-resumes without repeating requests and re-parses saved responses offline.
-Before writing outputs or sending requests, resume checks that each reused
-request exactly matches the current evidence, rubric and requested model.
-Changed requests require a new output directory. The configured returned-model
-requirement is enforced on new and saved responses. Duplicate saved cases and
-removed cases are rejected. Existing `human_review.csv` rows are preserved byte
-for byte; newly judged cases are appended with blank human fields. An unchanged
-case selection leaves the whole sheet unchanged. Different review schemas
-require a new output version.
 
 Phase runs must match the full panel's exact input sentences and the released
 triplet text behind neutral variants. Annotation-only metadata changes remain
