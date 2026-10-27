@@ -204,8 +204,8 @@ python scripts/export_warbias_submission.py build --output ../../warbias-paper-a
 python scripts/export_warbias_submission.py verify --directory ../../warbias-paper-artifact
 ```
 
-The exporter packages source, required evaluator interfaces, tests, this guide,
-a credential-free judge example and the upstream license. It excludes unrelated
+The exporter packages source, required evaluator interfaces, tests, this guide
+and the upstream license. It excludes unrelated
 benchmark task collections, result files, caches, local configuration and Git
 history. The destination must not exist; use a new version when refreshing an
 artifact so previous snapshots retain their identities.
