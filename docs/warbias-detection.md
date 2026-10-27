@@ -173,6 +173,42 @@ unchanged. The parameter does not activate additional study actors.
 | `warbias_min_independent_components_v1` | a group needs ≥ 5 claim components for M1, worst group and rankings | `calibration.SUPPORT_RULE` |
 | `warbias_tau_development_quantile_pmi_v2` | tau = 20th percentile of \|Δ(S) − Δ(C)\| on development triplets with neutral variants; 10th/30th as sensitivity | `calibration.TAU_RULE`, `calibration.development_tau` |
 
+## Paper artifact export
+
+From the maintained Fair-UK checkout, build into a new directory outside both
+project repositories:
+
+```sh
+python scripts/export_warbias_submission.py build --output ../../warbias-paper-artifact
+python scripts/export_warbias_submission.py verify --directory ../../warbias-paper-artifact
+```
+
+The exporter packages source, required evaluator interfaces, tests, this guide
+and the upstream license. It excludes unrelated
+benchmark task collections, result files, caches, local configuration and Git
+history. The destination must not exist; use a new version when refreshing an
+artifact so previous snapshots retain their identities.
+
+After installing the exported package as described above, verify it from its
+own root:
+
+```sh
+python tools/verify_manifest.py verify --directory . --check-imports
+```
+
+The verifier checks relative-path hashes and rejects changed, missing or added
+source files. The import check ensures `lm_eval` comes from the exported source,
+not another installation. Runtime caches and environment/build metadata are
+excluded. Verification uses the standard library; export construction uses
+`tomllib` on Python 3.11+ or `tomli` on Python 3.10.
+
+Datasets, models, saved predictions and human review files are supplied
+separately. Published source pins and citations remain intact. Before a
+double-blind release, arrange reviewed anonymous data/source mappings and check
+those references against the venue policy. Keep internal checkout receipts
+outside the artifact and preserve the upstream license. Code packaging does
+not establish baseline completeness, judge calibration or intervention readiness.
+
 ## Verification
 
 - Unit and end-to-end tests on synthetic panels: `tests/fair_uk/test_warbias_*.py`.
