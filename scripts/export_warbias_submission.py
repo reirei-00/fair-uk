@@ -204,14 +204,6 @@ def export(source, output):
         (staging / "pyproject.toml").write_text(
             _project_toml(source / "pyproject.toml"), encoding="utf-8"
         )
-        config = json.loads(
-            (source / "configs/fair_uk/jev_benign.json").read_text(encoding="utf-8")
-        )
-        config.pop("keychain", None)
-        (staging / "configs/fair_uk").mkdir(parents=True)
-        (staging / "configs/fair_uk/jev_benign.json").write_text(
-            json.dumps(config, indent=2) + "\n", encoding="utf-8"
-        )
         files = {str(p.relative_to(staging)): _hash(p) for p in _source_files(staging)}
         (staging / MANIFEST).write_text(
             json.dumps({"schema_version": 1, "files": files}, indent=2, sort_keys=True)
