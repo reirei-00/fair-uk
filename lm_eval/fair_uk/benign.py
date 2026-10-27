@@ -103,16 +103,20 @@ def validate_judgment(row, response, judgment):
         or not judgment["judge_identity"]
     ):
         raise ValueError("Judgment provenance is required")
-    check_labels(judgment["labels"], response)
+    provider = judgment["judge_identity"].get("provider")
+    if provider is not None and provider not in (
+        "openai-compatible",
+        "gemini",
+        "human",
+    ):
+        raise ValueError("Unsupported judgment provider")
     if (
-        judgment["judge_identity"].get("provider") == "jev"
-        or "raw_typed_response" in judgment
+        "raw_typed_response" in judgment
         or "typed_response_sha256" in judgment
         or "question_template_version" in judgment
     ):
-        from lm_eval.fair_uk import jev
-
-        jev.validate_judgment(row, response, judgment)
+        raise ValueError("Unsupported judgment evidence format")
+    check_labels(judgment["labels"], response)
 
 
 def score_response(row, prediction):
@@ -219,7 +223,7 @@ def parse_judgment(row, response, raw, judge_identity):
 
 
 def main(argv=None):
-    from lm_eval.fair_uk.api_runner import estimate, run
+    from lm_eval.fair_uk.api_runner import estimate, normalize_config, run
     from lm_eval.fair_uk.expansion import read_rows, write_rows
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -232,7 +236,7 @@ def main(argv=None):
         "--config",
         type=Path,
         required=True,
-        help="Judge configuration; hosted generation or JEV typed decisions",
+        help="Hosted judge configuration",
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit-clusters-per-stratum", type=int)
@@ -244,20 +248,7 @@ def main(argv=None):
     )
     predictions = read_rows(args.predictions)
     attach_judgments(rows, predictions, [])  # Exact selected IDs before any request.
-    config = json.loads(args.config.read_text())
-    if config.get("provider") == "jev":
-        from lm_eval.fair_uk import jev
-        from lm_eval.fair_uk.credentials import credential_environment
-
-        keychain = config.pop("keychain", None)
-        config = jev.validate_config(config)
-        if not args.execute:
-            print(json.dumps(jev.estimate(rows, predictions, config), indent=2))
-            return
-        with credential_environment(config.get("api_key_env", "JEV_API_KEY"), keychain):
-            jev.run(rows, predictions, config, args.output)
-        print(args.output / "judgments.jsonl")
-        return
+    config = normalize_config(json.loads(args.config.read_text()))
     indexed = {p["id"]: p for p in predictions}
     requests = [
         {
