@@ -1,9 +1,6 @@
 """Paired language comparisons with native metrics and separate group analyses."""
 
-import hashlib
-import json
 from collections import defaultdict
-from pathlib import Path
 from statistics import fmean
 
 import numpy as np
@@ -11,17 +8,11 @@ import numpy as np
 from lm_eval.fair_uk import VERSION
 from lm_eval.fair_uk.answers import NORMALIZED
 from lm_eval.fair_uk.capabilities import benchmark
-from lm_eval.fair_uk.data import (
-    PROTOCOLS,
-    dataset_spec,
-    family,
-    load,
-    merged_registry,
-    select_clusters,
-)
-from lm_eval.fair_uk.metrics import make_report, native_summaries, score_all
+from lm_eval.fair_uk.data import family
+from lm_eval.fair_uk.metrics import make_report, native_summaries
 from lm_eval.fair_uk.provenance import code_identity
 from lm_eval.fair_uk.reporting import native_entries
+from lm_eval.fair_uk.runs import load_verified_run
 
 
 def load_run(
@@ -31,123 +22,11 @@ def load_run(
     dataset_bundle=None,
     judgments_path=None,
 ):
-    manifest = json.loads((directory / "run.json").read_text())
-    task = manifest["task"]
-    if task not in merged_registry(dataset_bundle):
-        raise ValueError(
-            "Paired language comparisons require registered runs or a verified bundle"
-        )
-    if manifest["dataset"] != dataset_spec(task, dataset_bundle):
-        raise ValueError("Run dataset does not match the pinned registry")
-    if manifest["protocol"] != PROTOCOLS[family(task)]:
-        raise ValueError("Run protocol does not match the registered protocol")
-    identity = manifest.get("model_identity")
-    if not isinstance(identity, dict) or not (
-        identity.get("local_files_sha256")
-        or (identity.get("repository") and identity.get("revision"))
-        or (
-            identity.get("provider")
-            in ("openai", "google", "openai-compatible", "gemini")
-            and identity.get("model_snapshot")
-        )
-    ):
-        raise ValueError("Comparison requires a fingerprinted model run")
-    full = load(task, input_path, dataset_bundle=dataset_bundle)
-    rows = select_clusters(full, manifest["limit_clusters_per_stratum"])
-    checksum = hashlib.sha256("\n".join(r["id"] for r in rows).encode()).hexdigest()
-    if (
-        checksum != manifest["selected_ids_sha256"]
-        or len(rows) != manifest["selected_rows"]
-    ):
-        raise ValueError("Selected source IDs differ from the run manifest")
-    prediction_path = directory / "predictions.jsonl"
-    predictions = [
-        json.loads(line) for line in prediction_path.read_text().splitlines()
-    ]
-    if identity.get("provider") == "openai":
-        from lm_eval.fair_uk.openai_runner import (
-            identity as openai_identity,
-            validate_prediction,
-        )
-
-        if identity != openai_identity(identity["model_snapshot"], manifest["seed"]):
-            raise ValueError("OpenAI run identity differs from the supported settings")
-        indexed = {r["id"]: r for r in rows}
-        for prediction in predictions:
-            if prediction["id"] in indexed:
-                validate_prediction(indexed[prediction["id"]], prediction, identity)
-    if identity.get("provider") == "google":
-        from lm_eval.fair_uk.gemini_runner import (
-            identity as gemini_identity,
-            validate_prediction,
-        )
-
-        if identity != gemini_identity(identity["model_snapshot"], manifest["seed"]):
-            raise ValueError("Gemini identity differs from supported settings")
-        indexed = {r["id"]: r for r in rows}
-        for prediction in predictions:
-            if prediction["id"] in indexed:
-                validate_prediction(indexed[prediction["id"]], prediction, identity)
-    if manifest.get("model_backend") == "hosted-api":
-        from lm_eval.fair_uk.api_runner import (
-            identity as hosted_identity,
-            validate_prediction,
-        )
-
-        if identity != hosted_identity(
-            manifest.get("hosted_config"), manifest["protocol"]
-        ):
-            raise ValueError("Hosted run identity differs from its configuration")
-        source_fingerprint = hashlib.sha256(
-            json.dumps(
-                rows, ensure_ascii=False, sort_keys=True, allow_nan=False
-            ).encode()
-        ).hexdigest()
-        if manifest.get("source_rows_sha256") != source_fingerprint:
-            raise ValueError("Hosted source rows differ from the saved fingerprint")
-        indexed = {r["id"]: r for r in rows}
-        for prediction in predictions:
-            if prediction["id"] in indexed:
-                validate_prediction(indexed[prediction["id"]], prediction, identity)
-    if judgments_path is not None:
-        if family(task) != "warbias_benign":
-            raise ValueError("Rubric judgments apply only to benign requests")
-        from lm_eval.fair_uk.benign import attach_judgments
-
-        predictions = attach_judgments(
-            rows,
-            predictions,
-            [
-                json.loads(line)
-                for line in Path(judgments_path).read_text().splitlines()
-            ],
-        )
-    scored = score_all(rows, predictions, answer_policy)
-    provenance = {
-        "run": manifest,
-        "predictions_sha256": hashlib.sha256(prediction_path.read_bytes()).hexdigest(),
-    }
-    if judgments_path is not None:
-        provenance["judgments_sha256"] = hashlib.sha256(
-            Path(judgments_path).read_bytes()
-        ).hexdigest()
-    if manifest.get("model_backend") in (
-        "hosted-api",
-        "openai",
-        "gemini",
-    ) or identity.get("provider"):
-        returned = [
-            (p.get("api_response") or {}).get("model")
-            or (p.get("api_response") or {}).get("modelVersion")
-            for p in predictions
-        ]
-        provenance["returned_models"] = sorted(
-            {version for version in returned if version}
-        )
-        provenance["responses_without_model_version"] = sum(
-            not version for version in returned
-        )
-    return scored, full, provenance
+    """Compatibility tuple: scored rows, full source rows and run provenance."""
+    verified = load_verified_run(
+        directory, input_path, answer_policy, dataset_bundle, judgments_path
+    )
+    return verified.scored_rows, verified.source_rows, verified.provenance
 
 
 def align(uk, en):
@@ -173,6 +52,7 @@ def align(uk, en):
         "score_group",
         "category",
         "expansion_version",
+        "annotation_panel_version",
         "comparison_unit",
         "actor",
         "gender",
@@ -302,10 +182,9 @@ def paired_native(uk, en, bootstrap, seed):
         left, right = [], []
         for a, b in zip(uk, en, strict=True):
             if not a["judgment_coverage"] or not b["judgment_coverage"]:
-                missing = {
-                    key: None
-                    for key in ("task_success", "full_refusal_rate", "any_refusal_rate")
-                }
+                missing = dict.fromkeys(
+                    ("task_success", "full_refusal_rate", "any_refusal_rate")
+                )
                 a, b = {**a, **missing}, {**b, **missing}
             left.append(a)
             right.append(b)
@@ -359,7 +238,9 @@ def paired_native(uk, en, bootstrap, seed):
                         row = source[row_index]
                         # Duplicated source draws must preserve WinoBias's paired correctness.
                         # Distinct draw IDs do not change the reported independent support.
-                        if row.get("expansion_version"):
+                        if row.get("expansion_version") or row.get(
+                            "annotation_panel_version"
+                        ):
                             row = {
                                 **row,
                                 "cluster": f"{key[0]}:{draw}:{row['cluster']}",

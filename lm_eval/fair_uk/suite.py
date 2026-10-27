@@ -61,7 +61,9 @@ def write_state(path, state):
     temporary.replace(path)
 
 
-def verify_result(directory, task, spec, rows, model_identity):
+def verify_result(
+    directory, task, spec, rows, model_identity, generation_prompt_format="raw"
+):
     """A successful child exit alone does not establish complete predictions."""
     run = json.loads((directory / "run.json").read_text())
     report = json.loads((directory / "report.json").read_text())
@@ -86,6 +88,11 @@ def verify_result(directory, task, spec, rows, model_identity):
         or run.get("dataset") != spec
         or run.get("task") != task
         or run.get("model_identity") != model_identity
+        or (
+            task_metadata(task)["required_capability"] == "generate_text"
+            and (run.get("generation_config") or {}).get("prompt_format", "raw")
+            != generation_prompt_format
+        )
         or report.get("provenance") != run
         or report.get("predictions_sha256") != prediction_digest
         or report.get("scorer_code_identity") != code_identity()
@@ -132,6 +139,12 @@ def main(argv=None):
         default=128,
         help="Checkpoint generation limit; hosted runs use their configuration",
     )
+    parser.add_argument(
+        "--generation-prompt-format",
+        choices=("raw", "native-chat"),
+        default="raw",
+        help="Checkpoint generation only; likelihood prompts remain raw",
+    )
     parser.add_argument("--bootstrap", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--answer-policy", choices=POLICIES, default=NORMALIZED)
@@ -173,6 +186,8 @@ def main(argv=None):
         parser.error("--api-config requires --model api")
     if args.model == "api" and args.model_args:
         parser.error("Use --api-config for hosted models")
+    if args.model == "api" and args.generation_prompt_format != "raw":
+        parser.error("--generation-prompt-format applies to checkpoint backends")
     if args.execute and (
         missing
         or (args.model == "api" and not args.api_config)
@@ -184,12 +199,14 @@ def main(argv=None):
     pairs = [
         (tracks["uk"], tracks["en"])
         for tracks in BENCHMARKS.values()
-        if all(task in selected and task in registry for task in tracks.values())
+        if {"uk", "en"} <= tracks.keys()
+        and all(task in selected and task in registry for task in tracks.values())
     ]
     plan = {
         "status": "execution_requested" if args.execute else "prepared_not_running",
         "ready": not missing,
         "backend": args.model,
+        "generation_prompt_format": args.generation_prompt_format,
         "model_arguments_configured": bool(
             args.api_config if args.model == "api" else args.model_args
         ),
@@ -238,6 +255,8 @@ def main(argv=None):
         "limit_clusters_per_stratum": args.limit_clusters_per_stratum,
         "code_identity": code_identity(),
     }
+    if args.generation_prompt_format != "raw":
+        identity["generation_prompt_format"] = args.generation_prompt_format
     # All selected data must validate before starting the first model.
     expected = {
         task: select_clusters(
@@ -286,6 +305,7 @@ def main(argv=None):
                         registry[task],
                         expected[task],
                         task_model,
+                        args.generation_prompt_format,
                     )
                     if verified != prior:
                         raise ValueError(
@@ -326,6 +346,11 @@ def main(argv=None):
                         "--max-output-tokens",
                         str(args.max_output_tokens),
                     ]
+                    if args.generation_prompt_format != "raw":
+                        command += [
+                            "--generation-prompt-format",
+                            args.generation_prompt_format,
+                        ]
                 if args.dataset_bundle:
                     command += ["--dataset-bundle", str(args.dataset_bundle)]
                 if args.limit_clusters_per_stratum is not None:
@@ -339,7 +364,12 @@ def main(argv=None):
                         f"{task} failed (exit {result.returncode}); Later tasks were not started"
                     )
                 state["tasks"][task] = verify_result(
-                    args.output / task, task, registry[task], expected[task], task_model
+                    args.output / task,
+                    task,
+                    registry[task],
+                    expected[task],
+                    task_model,
+                    args.generation_prompt_format,
                 )
                 write_state(path, state)
                 reports.append(str(args.output / task / "report.json"))
