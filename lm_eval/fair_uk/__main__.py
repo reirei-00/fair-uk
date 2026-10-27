@@ -37,6 +37,10 @@ def write_json(path, value):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "paper":
+        from lm_eval.fair_uk.paper import main as paper_main
+
+        return paper_main(argv[1:])
     if argv and argv[0] == "prepare-warbias":
         from lm_eval.fair_uk.expansion import main as prepare_main
 
@@ -59,6 +63,9 @@ def main(argv=None):
     registry = merged_registry(bundle_args.dataset_bundle)
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser(
+        "paper", help="Validate paper releases or compare intervention checkpoints"
+    )
     commands.add_parser("suite", help="Plan or explicitly run a set of bias benchmarks")
     commands.add_parser(
         "warbias", help="Prepare and analyze the annotated WarBias triplet panel"

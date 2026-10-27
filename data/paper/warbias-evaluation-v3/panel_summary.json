@@ -1,0 +1,182 @@
+{
+  "uk": {
+    "rows": 186,
+    "independent_components": 14,
+    "source_cases": 24,
+    "public_cases": 24,
+    "scope_eligible_rows": 186,
+    "rows_by": {
+      "actor": {
+        "idp": 80,
+        "veteran": 106
+      },
+      "gender": {
+        "men": 17,
+        "not_stated": 134,
+        "women": 35
+      },
+      "age": {
+        "middle_aged": 11,
+        "not_stated": 153,
+        "older": 11,
+        "young": 11
+      },
+      "group": {
+        "idp|men|middle_aged": 1,
+        "idp|men|not_stated": 6,
+        "idp|men|older": 1,
+        "idp|men|young": 1,
+        "idp|not_stated|middle_aged": 5,
+        "idp|not_stated|not_stated": 47,
+        "idp|not_stated|older": 5,
+        "idp|not_stated|young": 5,
+        "idp|women|middle_aged": 1,
+        "idp|women|not_stated": 6,
+        "idp|women|older": 1,
+        "idp|women|young": 1,
+        "veteran|men|not_stated": 8,
+        "veteran|not_stated|middle_aged": 4,
+        "veteran|not_stated|not_stated": 60,
+        "veteran|not_stated|older": 4,
+        "veteran|not_stated|young": 4,
+        "veteran|women|not_stated": 26
+      },
+      "split": {
+        "evaluation": 186
+      }
+    },
+    "components_by": {
+      "actor": {
+        "idp": 5,
+        "veteran": 11
+      },
+      "gender": {
+        "men": 11,
+        "not_stated": 12,
+        "women": 13
+      },
+      "age": {
+        "middle_aged": 6,
+        "not_stated": 14,
+        "older": 6,
+        "young": 6
+      },
+      "group": {
+        "idp|men|middle_aged": 1,
+        "idp|men|not_stated": 4,
+        "idp|men|older": 1,
+        "idp|men|young": 1,
+        "idp|not_stated|middle_aged": 4,
+        "idp|not_stated|not_stated": 5,
+        "idp|not_stated|older": 4,
+        "idp|not_stated|young": 4,
+        "idp|women|middle_aged": 1,
+        "idp|women|not_stated": 4,
+        "idp|women|older": 1,
+        "idp|women|young": 1,
+        "veteran|men|not_stated": 8,
+        "veteran|not_stated|middle_aged": 3,
+        "veteran|not_stated|not_stated": 9,
+        "veteran|not_stated|older": 3,
+        "veteran|not_stated|young": 3,
+        "veteran|women|not_stated": 10
+      }
+    },
+    "mean_words": {
+      "stereotype": 9.564516129032258,
+      "counter": 13.666666666666666,
+      "unrelated": 9.989247311827956
+    },
+    "counter_longer_than_stereotype_rows": 173
+  },
+  "en": {
+    "rows": 186,
+    "independent_components": 14,
+    "source_cases": 24,
+    "public_cases": 24,
+    "scope_eligible_rows": 186,
+    "rows_by": {
+      "actor": {
+        "idp": 80,
+        "veteran": 106
+      },
+      "gender": {
+        "men": 17,
+        "not_stated": 134,
+        "women": 35
+      },
+      "age": {
+        "middle_aged": 11,
+        "not_stated": 153,
+        "older": 11,
+        "young": 11
+      },
+      "group": {
+        "idp|men|middle_aged": 1,
+        "idp|men|not_stated": 6,
+        "idp|men|older": 1,
+        "idp|men|young": 1,
+        "idp|not_stated|middle_aged": 5,
+        "idp|not_stated|not_stated": 47,
+        "idp|not_stated|older": 5,
+        "idp|not_stated|young": 5,
+        "idp|women|middle_aged": 1,
+        "idp|women|not_stated": 6,
+        "idp|women|older": 1,
+        "idp|women|young": 1,
+        "veteran|men|not_stated": 8,
+        "veteran|not_stated|middle_aged": 4,
+        "veteran|not_stated|not_stated": 60,
+        "veteran|not_stated|older": 4,
+        "veteran|not_stated|young": 4,
+        "veteran|women|not_stated": 26
+      },
+      "split": {
+        "evaluation": 186
+      }
+    },
+    "components_by": {
+      "actor": {
+        "idp": 5,
+        "veteran": 11
+      },
+      "gender": {
+        "men": 11,
+        "not_stated": 12,
+        "women": 13
+      },
+      "age": {
+        "middle_aged": 6,
+        "not_stated": 14,
+        "older": 6,
+        "young": 6
+      },
+      "group": {
+        "idp|men|middle_aged": 1,
+        "idp|men|not_stated": 4,
+        "idp|men|older": 1,
+        "idp|men|young": 1,
+        "idp|not_stated|middle_aged": 4,
+        "idp|not_stated|not_stated": 5,
+        "idp|not_stated|older": 4,
+        "idp|not_stated|young": 4,
+        "idp|women|middle_aged": 1,
+        "idp|women|not_stated": 4,
+        "idp|women|older": 1,
+        "idp|women|young": 1,
+        "veteran|men|not_stated": 8,
+        "veteran|not_stated|middle_aged": 3,
+        "veteran|not_stated|not_stated": 9,
+        "veteran|not_stated|older": 3,
+        "veteran|not_stated|young": 3,
+        "veteran|women|not_stated": 10
+      }
+    },
+    "mean_words": {
+      "stereotype": 11.634408602150538,
+      "counter": 15.408602150537634,
+      "unrelated": 13.82258064516129
+    },
+    "counter_longer_than_stereotype_rows": 176
+  }
+}

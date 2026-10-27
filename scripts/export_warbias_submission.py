@@ -34,7 +34,8 @@ input requirements, commands, metric definitions and anonymous-release notes.
 
 Use a dedicated environment: this package retains the `lm_eval` namespace.
 Preserve the [upstream MIT license](LICENSE.md). Scientific source citations
-remain in the guide; this export does not bundle datasets or model checkpoints.
+remain in the guide. The compact frozen WarBias evaluation inputs are included
+under `data/paper/`; model weights and raw run outputs remain separate artifacts.
 """
 
 
@@ -193,6 +194,7 @@ def export(source, output):
             suffixes=SOURCE_SUFFIXES,
         )
         _copy_tree(source / "tests/fair_uk", staging / "tests/fair_uk")
+        _copy_tree(source / "data/paper", staging / "data/paper")
         for relative in (
             "tests/conftest.py",
             "docs/warbias-detection.md",
