@@ -18,6 +18,10 @@ from lm_eval.fair_uk.analysis_inputs import (
     load_annotations,
     severity_report,
 )
+from lm_eval.fair_uk.checkpoint_views import (
+    load_inference_views,
+    validate_inference_view,
+)
 from lm_eval.fair_uk.contracts import write_json
 from lm_eval.fair_uk.data import family
 from lm_eval.fair_uk.intervention_metrics import compare_predictions
@@ -248,6 +252,77 @@ def analyze_pair(exported, pair, analysis_rules, root):
     }, {"task": pair["task"], "rows": rows, "before_scored": pre, "after_scored": post}
 
 
+def inference_view(
+    config,
+    recipe,
+    receipt,
+    execution,
+    receipt_path,
+    root,
+    observed=None,
+    base_config_sha256=None,
+    base_files_sha256=None,
+):
+    """Validate an optional explicit view; strict original binding stays default."""
+    reference = config.get("inference_views")
+    if reference is None:
+        return None
+    require(
+        isinstance(reference, dict) and set(reference) == {"path", "sha256"},
+        "Inference views require a path and SHA-256",
+    )
+    path = Path(_path(root, reference["path"]))
+    sidecar = load_inference_views(path, reference["sha256"])
+    method = recipe["method"]
+    view = sidecar["models"][recipe["model_id"]]["methods"][method]
+    arm = execution["methods"][method]
+    original_reference = arm.get("receipt")
+    if original_reference:
+        original_path = (
+            original_reference.get("path")
+            if isinstance(original_reference, dict)
+            else original_reference
+        )
+        require(
+            view["original_receipt"]["path"] == original_path,
+            "Inference-view original receipt path differs from execution metadata",
+        )
+    source = {
+        item["path"]: item["sha256"] for item in receipt.get("source_model_files", [])
+    }
+    base_sha = (
+        base_config_sha256
+        or execution.get("model_config_sha256")
+        or source.get("config.json")
+    )
+    return validate_inference_view(
+        path,
+        sidecar_sha256=reference["sha256"],
+        model_id=recipe["model_id"],
+        method=method,
+        receipt_path=receipt_path,
+        receipt_sha256=digest(receipt_path),
+        original_checkpoint=arm["checkpoint"],
+        original_files_sha256={
+            item["path"]: item["sha256"]
+            for item in receipt[
+                "checkpoint_identity" if method == "rmu" else "merged_checkpoint_files"
+            ]
+        },
+        evaluation_checkpoint=observed["parameters"]["pretrained"]
+        if observed is not None
+        else view["evaluation_checkpoint"],
+        evaluation_files_sha256=observed["local_files_sha256"]
+        if observed is not None
+        else view["evaluation_files_sha256"],
+        model_revision=recipe["model_revision"],
+        tokenizer_revision=recipe["tokenizer_revision"],
+        base_path=recipe["model_path"],
+        base_config_sha256=base_sha,
+        base_files_sha256=base_files_sha256,
+    )
+
+
 def exposure_summary(config, intervention, root):
     """Validate current trainer events against the new reviewed source binding."""
     if not config:
@@ -297,6 +372,7 @@ def exposure_summary(config, intervention, root):
     receipt = read(receipt_path)
     recipe = read(paths["recipe"])
     evidence = read(paths["evidence_manifest"])
+    view = inference_view(config, recipe, receipt, execution, receipt_path, root)
     require(
         recipe.get("method") == method
         and recipe.get("data_manifest_sha256") == digest(paths["training_binding"]),
@@ -444,6 +520,7 @@ def exposure_summary(config, intervention, root):
         "log": {"path": str(log), "sha256": digest(log)},
         "receipt": {"path": str(receipt_path), "sha256": digest(receipt_path)},
         "human_validated": manifest.get("human_validated"),
+        **({"inference_view": view} if view is not None else {}),
         "outcome_correlation": None,
         "limitations": "Actual exposure summaries only; no group causality or exposure-outcome correlation is inferred. Weighted tokens use logged scalar stream coefficients, not per-token confidence weights or gradient magnitudes. Positive acquisition is separate from forgetting and null task-vector selection. Corrective-derived adversarial views keep their original source identity.",
     }
@@ -472,20 +549,32 @@ def bind_training_pair(exported, exposure_config, intervention, root):
         before.get("parameters", {}).get("pretrained") == recipe["model_path"],
         "Before checkpoint path differs from the frozen training base",
     )
-    require(
-        after.get("parameters", {}).get("pretrained") == arm["checkpoint"],
-        "After checkpoint path differs from the actual trained arm",
-    )
     expected = {
         item["path"]: item["sha256"]
         for item in receipt[
             "checkpoint_identity" if method == "rmu" else "merged_checkpoint_files"
         ]
     }
-    require(
-        bool(expected) and after.get("local_files_sha256") == expected,
-        "After checkpoint bytes differ from the actual training receipt",
+    view = inference_view(
+        exposure_config,
+        recipe,
+        receipt,
+        execution,
+        receipt_path,
+        root,
+        observed=after,
+        base_config_sha256=(before.get("local_files_sha256") or {}).get("config.json"),
+        base_files_sha256=before.get("local_files_sha256"),
     )
+    if view is None:
+        require(
+            after.get("parameters", {}).get("pretrained") == arm["checkpoint"],
+            "After checkpoint path differs from the actual trained arm",
+        )
+        require(
+            bool(expected) and after.get("local_files_sha256") == expected,
+            "After checkpoint bytes differ from the actual training receipt",
+        )
     if method == "rmu":
         base_status = "path_and_frozen_recipe_pin_only_source_base_hashes_not_recorded"
     else:
@@ -512,6 +601,7 @@ def bind_training_pair(exported, exposure_config, intervention, root):
         "base_model_id": recipe.get("model_id"),
         "base_revision": recipe.get("model_revision"),
         "null_task_vector_allowed": method == "task_vector",
+        **({"inference_view": view} if view is not None else {}),
     }
 
 
@@ -743,8 +833,10 @@ def analyze(config_path, output):
     inputs = [config_path]
     if pairs:
         inputs.append(Path(_path(root, config["collector"]["evaluator_root"])))
-    for value in (config.get("exposure") or {}).values():
-        inputs.append(Path(_path(root, value)))
+    for key, value in (config.get("exposure") or {}).items():
+        inputs.append(
+            Path(_path(root, value["path"] if key == "inference_views" else value))
+        )
     for pair in pairs:
         inputs.extend(
             Path(_path(root, pair[name]))
@@ -835,6 +927,7 @@ def analyze(config_path, output):
                 "transfer_metrics.py",
                 "analysis_inputs.py",
                 "baseline.py",
+                "checkpoint_views.py",
                 "study_metric_sources.json",
             )
         },
