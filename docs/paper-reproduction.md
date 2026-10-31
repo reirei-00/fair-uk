@@ -9,6 +9,11 @@ installing `fairforget-warbias` from that directory; the upstream `lm_eval`
 package alone does not provide these study interfaces. Other FairForget
 benchmark workflows and their root dependencies remain separate.
 
+For the complete 18-entry study metric record from saved before/after outputs,
+use [`paper all-metrics`](all-study-metrics.md). It validates runs with their
+frozen collector, keeps analysis identity separate and records missing
+calibration, review or collector inputs explicitly.
+
 ## Frozen evaluation inputs
 
 `data/paper/warbias-evaluation-v3/` contains the exact frozen adapted evaluation

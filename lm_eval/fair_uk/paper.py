@@ -82,6 +82,12 @@ def main(argv=None):
     native.add_argument("--output", type=Path, required=True)
     native.add_argument("--bootstrap", type=int, default=1000)
     native.add_argument("--seed", type=int, default=42)
+    all_metrics = commands.add_parser(
+        "all-metrics",
+        help="All 18 study commitments from frozen-collector-validated saved pairs",
+    )
+    all_metrics.add_argument("--config", type=Path, required=True)
+    all_metrics.add_argument("--output", type=Path, required=True)
     lineage = commands.add_parser(
         "bind-training", help="Bind comparison checkpoints to exact trainer artifacts"
     )
@@ -126,6 +132,11 @@ def main(argv=None):
             output=args.output,
         )
         print(args.output / "paired.json")
+    elif args.command == "all-metrics":
+        from lm_eval.fair_uk.all_metrics import analyze
+
+        analyze(args.config, args.output)
+        print(args.output / "all_metrics.json")
     elif args.command == "bind-training":
         from lm_eval.fair_uk.contracts import file_sha256, write_json
         from lm_eval.fair_uk.lineage import bind_training_evidence

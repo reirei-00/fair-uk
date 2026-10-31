@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "kind": "study_metric_calculation_source_receipt",
+  "source_repository": "reirei-00/fair-uk",
+  "source_commit": "710ae774a327e948e8957879dcc1ce071bbc5eae",
+  "modules": {
+    "analysis_inputs.py": {
+      "original_sha256": "1b34236f29040b4f2773a118ae480e32c327b0effba124e0ab73beb7be7133d2",
+      "restored_sha256": "1b34236f29040b4f2773a118ae480e32c327b0effba124e0ab73beb7be7133d2",
+      "mode": "byte_exact"
+    },
+    "intervention_metrics.py": {
+      "original_sha256": "bb552a303ac2040b328bb9d127140ad4b248f12dd073ee797d86a0580b4e90d6",
+      "restored_sha256": "bb552a303ac2040b328bb9d127140ad4b248f12dd073ee797d86a0580b4e90d6",
+      "mode": "byte_exact"
+    },
+    "transfer_metrics.py": {
+      "original_sha256": "01acff8ac023a60e0dd13b2fb2bded168039637e5b6a33da22b3c3517eeea522",
+      "restored_sha256": "01acff8ac023a60e0dd13b2fb2bded168039637e5b6a33da22b3c3517eeea522",
+      "mode": "byte_exact"
+    },
+    "baseline.py": {
+      "original_sha256": "6ee7266bed3e81959fa537f3fe762bc0b5ea9056de1a314efb94b7b37b519c3f",
+      "restored_sha256": "6b21336dc1f486c86f5ebcae29c8d80082d2850c508eade242921556490df57d",
+      "mode": "selected_pure_helpers_only",
+      "functions": [
+        "resolve",
+        "measurement_policy"
+      ],
+      "source_function_AST_identical": true,
+      "dependencies": "Local file digest helper only; old collector/capability CLI excluded."
+    }
+  },
+  "excluded": [
+    "legacy measurement collector/CLI",
+    "JEV selection",
+    "external capability preparation"
+  ],
+  "metric_entries": 18,
+  "interpretation": "New saved-only orchestration preserves pure calculation semantics and records collector and analysis identities separately."
+}
