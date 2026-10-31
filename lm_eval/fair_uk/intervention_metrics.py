@@ -131,7 +131,7 @@ def _state(margin, tau):
     return "S" if margin > tau else "C" if margin < -tau else "N"
 
 
-def _interval(pairs, statistic, bootstrap, seed):
+def _interval(pairs, statistic, bootstrap, seed, *, clone_identities=True):
     """Paired percentile draws of whole blocks, with support checked per stratum."""
     base = {"ci95": None, "valid_replicates": 0, "requested_replicates": bootstrap}
     if not bootstrap:
@@ -158,6 +158,9 @@ def _interval(pairs, statistic, bootstrap, seed):
         for keys in strata.values():
             for draw, index in enumerate(rng.integers(len(keys), size=len(keys))):
                 key = keys[int(index)]
+                if not clone_identities:
+                    sampled.extend(blocks[key])
+                    continue
                 prefix = f"{key[0]}:{draw}:"
                 for left, right in blocks[key]:
                     copies = []
@@ -221,7 +224,9 @@ def _shared_intervals(pairs, statistic, metrics, bootstrap, seed):
                 values[metric].append(value)
         return 0.0
 
-    common = _interval(pairs, collect, bootstrap, seed)
+    # This helper is used only by native BBQ summaries, which depend on
+    # condition/group/outcome counts and never on row or component identities.
+    common = _interval(pairs, collect, bootstrap, seed, clone_identities=False)
     if common["status"] != "paired_cluster_percentile":
         return {metric: dict(common) for metric in metrics}
     return {
