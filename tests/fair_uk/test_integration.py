@@ -138,6 +138,18 @@ def test_model_fingerprints_and_secret_redaction(tmp_path):
     assert first != model_identity(f"pretrained={tmp_path}")
 
 
+def test_model_fingerprint_records_batch_invariance(tmp_path, monkeypatch):
+    (tmp_path / "config.json").write_text("{}")
+    monkeypatch.delenv("VLLM_BATCH_INVARIANT", raising=False)
+    normal = model_identity(f"pretrained={tmp_path}")
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "1")
+    invariant = model_identity(f"pretrained={tmp_path}")
+    assert normal["execution_environment"] == {"VLLM_BATCH_INVARIANT": False}
+    assert invariant["execution_environment"] == {"VLLM_BATCH_INVARIANT": True}
+    assert normal["local_files_sha256"] == invariant["local_files_sha256"]
+    assert normal != invariant
+
+
 def tiny_model(path):
     torch = pytest.importorskip("torch")
     transformers = pytest.importorskip("transformers")
