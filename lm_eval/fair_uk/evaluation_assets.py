@@ -83,6 +83,31 @@ def _serialization(tokenizer):
     )
 
 
+def _special_token_descriptor(tokenizer, value):
+    """Resolve strings only through this tokenizer's existing token identity."""
+    if isinstance(value, (list, tuple)):
+        return [_special_token_descriptor(tokenizer, item) for item in value]
+    convert = getattr(tokenizer, "convert_tokens_to_ids", None)
+    decoder = getattr(tokenizer, "added_tokens_decoder", None)
+    if (
+        not isinstance(value, str)
+        or not callable(convert)
+        or not isinstance(decoder, dict)
+    ):
+        return value
+    identifier = convert(value)
+    if (
+        isinstance(identifier, bool)
+        or not isinstance(identifier, Integral)
+        or identifier < 0
+    ):
+        return value
+    descriptor = decoder.get(identifier)
+    if getattr(descriptor, "content", None) != value:
+        return value
+    return descriptor
+
+
 def _tokenizer_metadata(tokenizer, backend):
     names = (
         "special_tokens_map_extended",
@@ -115,6 +140,14 @@ def _tokenizer_metadata(tokenizer, backend):
         for name in names
         if hasattr(tokenizer, name)
     }
+    extended = getattr(tokenizer, "special_tokens_map_extended", None)
+    if isinstance(extended, dict):
+        # Runtime padding and saved tokenizers can expose str vs AddedToken.
+        # Keep the actual descriptor flags; do not reduce tokens to their text.
+        result["special_tokens_map_extended"] = {
+            key: _json_value(_special_token_descriptor(tokenizer, value))
+            for key, value in extended.items()
+        }
     result["tokenizer_class"] = (
         f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}"
     )

@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from lm_eval.fair_uk.data import PROTOCOLS
-from lm_eval.fair_uk.evaluation_assets import evaluation_asset_identity
+from lm_eval.fair_uk.evaluation_assets import (
+    _tokenizer_metadata,
+    evaluation_asset_identity,
+)
 
 
 class FakeTokenizer:
@@ -106,6 +109,92 @@ def test_tokenizer_normalizer_and_special_token_changes_are_captured():
     different_bos = evaluation_asset_identity(backend, [triplet()], "raw")
     assert different_bos["input_sha256"] != changed["input_sha256"]
     assert different_bos["tokenizer_sha256"] != changed["tokenizer_sha256"]
+
+
+def special_token_backend():
+    backend = FakeBackend()
+    tokenizer = backend.tokenizer
+    descriptor = SimpleNamespace(
+        content="<pad>",
+        single_word=False,
+        lstrip=False,
+        rstrip=False,
+        normalized=False,
+        special=True,
+    )
+    tokenizer.added_tokens_decoder = {11: descriptor}
+    tokenizer.convert_tokens_to_ids = lambda value: 11 if value == "<pad>" else None
+    tokenizer.special_tokens_map_extended = {"pad_token": "<pad>"}
+    return backend, descriptor
+
+
+def test_runtime_and_saved_special_token_representations_have_the_same_identity():
+    backend, descriptor = special_token_backend()
+    tokenizer = backend.tokenizer
+    original = deepcopy(tokenizer.special_tokens_map_extended)
+    string_identity = evaluation_asset_identity(backend, [triplet()], "raw")
+    assert tokenizer.special_tokens_map_extended == original
+    tokenizer.special_tokens_map_extended["pad_token"] = descriptor
+    assert evaluation_asset_identity(backend, [triplet()], "raw") == string_identity
+    assert tokenizer.special_tokens_map_extended["pad_token"] is descriptor
+
+
+@pytest.mark.parametrize(
+    "flag", ["single_word", "lstrip", "rstrip", "normalized", "special"]
+)
+def test_special_token_canonicalization_preserves_actual_descriptor_flags(flag):
+    backend, descriptor = special_token_backend()
+    original = evaluation_asset_identity(backend, [triplet()], "raw")
+    setattr(descriptor, flag, not getattr(descriptor, flag))
+    changed = evaluation_asset_identity(backend, [triplet()], "raw")
+    assert changed["tokenizer_sha256"] != original["tokenizer_sha256"]
+    assert changed["input_sha256"] == original["input_sha256"]
+    metadata = _tokenizer_metadata(backend.tokenizer, backend)
+    assert metadata["special_tokens_map_extended"]["pad_token"][flag] == getattr(
+        descriptor, flag
+    )
+
+
+@pytest.mark.parametrize("identifier", [None, True, -1, 999])
+def test_special_token_strings_without_verified_decoder_ids_stay_distinct(identifier):
+    backend, descriptor = special_token_backend()
+    backend.tokenizer.convert_tokens_to_ids = lambda value: identifier
+    string_identity = evaluation_asset_identity(backend, [triplet()], "raw")
+    backend.tokenizer.special_tokens_map_extended["pad_token"] = descriptor
+    assert (
+        evaluation_asset_identity(backend, [triplet()], "raw")["tokenizer_sha256"]
+        != string_identity["tokenizer_sha256"]
+    )
+
+
+def test_special_token_decoder_content_must_match_the_original_string():
+    backend, descriptor = special_token_backend()
+    original = backend.tokenizer.special_tokens_map_extended["pad_token"]
+    descriptor.content = "<another-token>"
+    assert (
+        _tokenizer_metadata(backend.tokenizer, backend)["special_tokens_map_extended"][
+            "pad_token"
+        ]
+        == original
+    )
+    string_identity = evaluation_asset_identity(backend, [triplet()], "raw")
+    backend.tokenizer.special_tokens_map_extended["pad_token"] = descriptor
+    assert (
+        evaluation_asset_identity(backend, [triplet()], "raw")["tokenizer_sha256"]
+        != string_identity["tokenizer_sha256"]
+    )
+
+
+def test_additional_special_token_lists_resolve_only_existing_descriptors():
+    backend, descriptor = special_token_backend()
+    backend.tokenizer.special_tokens_map_extended = {
+        "additional_special_tokens": ["<pad>", "unmapped"]
+    }
+    first = evaluation_asset_identity(backend, [triplet()], "raw")
+    backend.tokenizer.special_tokens_map_extended = {
+        "additional_special_tokens": [descriptor, "unmapped"]
+    }
+    assert evaluation_asset_identity(backend, [triplet()], "raw") == first
 
 
 def test_effective_input_tokens_detect_changed_encoding_even_same_serialization():
