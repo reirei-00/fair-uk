@@ -239,6 +239,62 @@ def _shared_intervals(pairs, statistic, metrics, bootstrap, seed):
     }
 
 
+def _macro_interval(pairs, metric, bootstrap, seed):
+    """Resample component means without copying every observation in each draw."""
+
+    def reference(sampled):
+        return _difference(
+            _macro([x for x, _ in sampled], metric),
+            _macro([y for _, y in sampled], metric),
+        )
+
+    if (
+        not bootstrap
+        or not pairs
+        or any(not x.get("stratum") or not x.get("cluster") for x, _ in pairs)
+    ):
+        return _interval(pairs, reference, bootstrap, seed)
+    if any(x.get(metric) is None or y.get(metric) is None for x, y in pairs):
+        return _interval(pairs, reference, bootstrap, seed)
+    blocks, strata = defaultdict(list), defaultdict(list)
+    for pair in pairs:
+        blocks[pair[0]["stratum"], pair[0]["cluster"]].append(pair)
+    for key in sorted(blocks):
+        strata[key[0]].append(key)
+    if any(len(keys) < 2 for keys in strata.values()):
+        return _interval(pairs, reference, bootstrap, seed)
+    means = {
+        key: (fmean(x[metric] for x, _ in rows), fmean(y[metric] for _, y in rows))
+        for key, rows in blocks.items()
+    }
+    rng, values = np.random.default_rng(seed), []
+    for _ in range(bootstrap):
+        sampled = {}
+        for keys in strata.values():
+            for draw, index in enumerate(rng.integers(len(keys), size=len(keys))):
+                key = keys[int(index)]
+                prefix = f"{key[0]}:{draw}:{key[1]}"
+                if prefix in sampled:
+                    return _interval(pairs, reference, bootstrap, seed)
+                sampled[prefix] = means[key]
+        ordered = [sampled[key] for key in sorted(sampled)]
+        value = _difference(fmean(x for x, _ in ordered), fmean(y for _, y in ordered))
+        if value is not None and math.isfinite(value):
+            values.append(value)
+    complete = len(values) == bootstrap
+    return {
+        "ci95": np.quantile(values, [0.025, 0.975]).tolist() if complete else None,
+        "valid_replicates": len(values),
+        "requested_replicates": bootstrap,
+        "status": "paired_cluster_percentile"
+        if complete
+        else "inconclusive_undefined_replicates",
+        "components_per_stratum": {
+            stratum: len(keys) for stratum, keys in strata.items()
+        },
+    }
+
+
 def _native_changes(before, after, pairs, bootstrap, seed):
     a = {_identity(r): r for r in native_summaries(before)}
     b = {_identity(r): r for r in native_summaries(after)}
@@ -694,9 +750,21 @@ def _paired_profiles(pre, post, pairs, bootstrap, seed):
                     if nonlinear
                     else _macro([v for _, v in observed], metric)
                 )
-                outcome = _measure(
-                    paired_pre, paired_post, observed, statistic, bootstrap, seed
+                linear = (
+                    not nonlinear and _difference(paired_pre, paired_post) is not None
                 )
+                outcome = _measure(
+                    paired_pre,
+                    paired_post,
+                    observed,
+                    statistic,
+                    0 if linear else bootstrap,
+                    seed,
+                )
+                if linear:
+                    outcome["uncertainty"] = _macro_interval(
+                        observed, metric, bootstrap, seed
+                    )
                 outcome.update(
                     absolute_pre=value,
                     absolute_post=after_values[metric],

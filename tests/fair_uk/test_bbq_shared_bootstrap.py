@@ -78,6 +78,19 @@ def test_same_results_as_independent_metric_draws(monkeypatch, draws, seed):
         }
 
     monkeypatch.setattr(metrics, "_shared_intervals", independent)
+    monkeypatch.setattr(
+        metrics,
+        "_macro_interval",
+        lambda pairs, metric, draws, seed: metrics._interval(
+            pairs,
+            lambda sample: metrics._difference(
+                metrics._macro([x for x, _ in sample], metric),
+                metrics._macro([y for _, y in sample], metric),
+            ),
+            draws,
+            seed,
+        ),
+    )
     calls = 0
     separate = metrics.compare_predictions(
         rows, before, after, bootstrap=draws, seed=seed
