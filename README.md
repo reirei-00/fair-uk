@@ -4,7 +4,7 @@
 
 Fair-UK supports the **WarBias** study of bias involving veterans and internally displaced people, including age and gender profiles. BBQ, StereoSet and WinoBias provide complementary measurements. Each benchmark reports its own metrics, supplemented by subgroup and worst-group comparisons.
 
-> **Pilot:** datasets are human-unvalidated. Results describe these benchmark cases and do not certify that a model is fair.
+> **Pilot:** dataset WarBias is human-validated (1059 triplets). BBQ, StereoSet and WinoBias is translated and validated by samples. 
 
 ## Quick start
 
