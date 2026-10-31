@@ -1,6 +1,7 @@
 """Run identity checks that prevent silently mixing model checkpoints."""
 
 import hashlib
+import os
 import re
 from pathlib import Path
 
@@ -51,6 +52,11 @@ def model_identity(model_args):
         parameters=safe,
         arguments_sha256=hashlib.sha256(model_args.encode()).hexdigest(),
     )
+    try:
+        invariant = int(os.getenv("VLLM_BATCH_INVARIANT", "0")) != 0
+    except ValueError:
+        invariant = False
+    identity["execution_environment"] = {"VLLM_BATCH_INVARIANT": invariant}
     return identity
 
 
@@ -93,6 +99,9 @@ def fixed_inference_settings(run):
         tokenizer = {"status": "recorded", "sha256": digest}
     return {
         "tokenizer_identity": tokenizer,
+        "execution_environment": (run.get("model_identity") or {}).get(
+            "execution_environment"
+        ),
         **{
             key: run.get(key)
             for key in (

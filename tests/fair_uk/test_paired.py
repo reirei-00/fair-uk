@@ -158,6 +158,33 @@ def test_primary_annotated_warbias_is_not_replaced_by_native_raw_scoring():
         compare_verified(before, before, draws=0)
 
 
+def test_paired_native_rejects_changed_execution_environment():
+    before = record(rows())
+    after = copy.deepcopy(before)
+    before.provenance["run"]["model_identity"]["execution_environment"] = {
+        "VLLM_BATCH_INVARIANT": False
+    }
+    after.provenance["run"]["model_identity"]["execution_environment"] = {
+        "VLLM_BATCH_INVARIANT": True
+    }
+    with pytest.raises(ValueError, match="inference settings"):
+        compare_verified(before, after, draws=0)
+    before.provenance["run"]["model_identity"]["execution_environment"] = {
+        "VLLM_BATCH_INVARIANT": True
+    }
+    assert compare_verified(before, after, draws=0)["effects"]
+
+
+def test_paired_native_rejects_missing_environment_evidence():
+    before = record(rows())
+    after = copy.deepcopy(before)
+    after.provenance["run"]["model_identity"]["execution_environment"] = {
+        "VLLM_BATCH_INVARIANT": False
+    }
+    with pytest.raises(ValueError, match="inference settings"):
+        compare_verified(before, after, draws=0)
+
+
 def test_undefined_bbq_denominator_retains_native_zero_but_not_a_paired_effect():
     source = rows("bbq_uk")
     for row in source:
