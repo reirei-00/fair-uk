@@ -154,7 +154,8 @@ def export_pair(pair, collector, root, output):
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     command = [
-        _path(root, collector["python"]),
+        # Resolving this symlink would escape a selected virtual environment.
+        os.path.abspath(root / Path(collector["python"]).expanduser()),
         str(Path(__file__).with_name("collector_export.py")),
         "--request",
         str(request_path),
