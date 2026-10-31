@@ -131,7 +131,7 @@ def _state(margin, tau):
     return "S" if margin > tau else "C" if margin < -tau else "N"
 
 
-def _interval(pairs, statistic, bootstrap, seed):
+def _interval(pairs, statistic, bootstrap, seed, *, clone_identities=True):
     """Paired percentile draws of whole blocks, with support checked per stratum."""
     base = {"ci95": None, "valid_replicates": 0, "requested_replicates": bootstrap}
     if not bootstrap:
@@ -158,6 +158,9 @@ def _interval(pairs, statistic, bootstrap, seed):
         for keys in strata.values():
             for draw, index in enumerate(rng.integers(len(keys), size=len(keys))):
                 key = keys[int(index)]
+                if not clone_identities:
+                    sampled.extend(blocks[key])
+                    continue
                 prefix = f"{key[0]}:{draw}:"
                 for left, right in blocks[key]:
                     copies = []
@@ -211,6 +214,92 @@ def _measure(pre, post, pairs, statistic, bootstrap, seed):
     }
 
 
+def _shared_intervals(pairs, statistic, metrics, bootstrap, seed):
+    """Use identical whole-block draws once for statistics on the same cohort."""
+    values = {metric: [] for metric in metrics}
+
+    def collect(sampled):
+        for metric, value in statistic(sampled).items():
+            if value is not None and math.isfinite(value):
+                values[metric].append(value)
+        return 0.0
+
+    # This helper is used only by native BBQ summaries, which depend on
+    # condition/group/outcome counts and never on row or component identities.
+    common = _interval(pairs, collect, bootstrap, seed, clone_identities=False)
+    if common["status"] != "paired_cluster_percentile":
+        return {metric: dict(common) for metric in metrics}
+    return {
+        metric: {
+            **common,
+            "status": "paired_cluster_percentile"
+            if len(draws) == bootstrap
+            else "inconclusive_undefined_replicates",
+            "valid_replicates": len(draws),
+            "ci95": np.quantile(draws, [0.025, 0.975]).tolist()
+            if len(draws) == bootstrap
+            else None,
+        }
+        for metric, draws in values.items()
+    }
+
+
+def _macro_interval(pairs, metric, bootstrap, seed):
+    """Resample component means without copying every observation in each draw."""
+
+    def reference(sampled):
+        return _difference(
+            _macro([x for x, _ in sampled], metric),
+            _macro([y for _, y in sampled], metric),
+        )
+
+    if (
+        not bootstrap
+        or not pairs
+        or any(not x.get("stratum") or not x.get("cluster") for x, _ in pairs)
+    ):
+        return _interval(pairs, reference, bootstrap, seed)
+    if any(x.get(metric) is None or y.get(metric) is None for x, y in pairs):
+        return _interval(pairs, reference, bootstrap, seed)
+    blocks, strata = defaultdict(list), defaultdict(list)
+    for pair in pairs:
+        blocks[pair[0]["stratum"], pair[0]["cluster"]].append(pair)
+    for key in sorted(blocks):
+        strata[key[0]].append(key)
+    if any(len(keys) < 2 for keys in strata.values()):
+        return _interval(pairs, reference, bootstrap, seed)
+    means = {
+        key: (fmean(x[metric] for x, _ in rows), fmean(y[metric] for _, y in rows))
+        for key, rows in blocks.items()
+    }
+    rng, values = np.random.default_rng(seed), []
+    for _ in range(bootstrap):
+        sampled = {}
+        for keys in strata.values():
+            for draw, index in enumerate(rng.integers(len(keys), size=len(keys))):
+                key = keys[int(index)]
+                prefix = f"{key[0]}:{draw}:{key[1]}"
+                if prefix in sampled:
+                    return _interval(pairs, reference, bootstrap, seed)
+                sampled[prefix] = means[key]
+        ordered = [sampled[key] for key in sorted(sampled)]
+        value = _difference(fmean(x for x, _ in ordered), fmean(y for _, y in ordered))
+        if value is not None and math.isfinite(value):
+            values.append(value)
+    complete = len(values) == bootstrap
+    return {
+        "ci95": np.quantile(values, [0.025, 0.975]).tolist() if complete else None,
+        "valid_replicates": len(values),
+        "requested_replicates": bootstrap,
+        "status": "paired_cluster_percentile"
+        if complete
+        else "inconclusive_undefined_replicates",
+        "components_per_stratum": {
+            stratum: len(keys) for stratum, keys in strata.items()
+        },
+    }
+
+
 def _native_changes(before, after, pairs, bootstrap, seed):
     a = {_identity(r): r for r in native_summaries(before)}
     b = {_identity(r): r for r in native_summaries(after)}
@@ -227,12 +316,46 @@ def _native_changes(before, after, pairs, bootstrap, seed):
             for r in summaries.values()
         )
 
+    def difference(left, right, metric, key):
+        if (
+            bbq
+            and metric
+            in ("raw_bias", "bias_score", "signed_bias_macro", "absolute_bias_macro")
+            and (
+                zero_denominator(left.get(key, {}), left)
+                or zero_denominator(right.get(key, {}), right)
+            )
+        ):
+            return None
+        return _difference(
+            left.get(key, {}).get(metric), right.get(key, {}).get(metric)
+        )
+
     output = []
     for key, pre in a.items():
         post, selected = b[key], _native_subset(pairs_as_rows(pairs), pre)
         ids = {r["id"] for r in selected}
         scoped = [(x, y) for x, y in pairs if x["id"] in ids]
         values = {}
+        shared = None
+        if bbq and bootstrap:
+            metric_names = tuple(_numeric(pre))
+
+            def statistics(sampled, key=key, metric_names=metric_names):
+                left = {
+                    _identity(r): r for r in native_summaries([x for x, _ in sampled])
+                }
+                right = {
+                    _identity(r): r for r in native_summaries([y for _, y in sampled])
+                }
+                return {
+                    metric: difference(left, right, metric, key)
+                    for metric in metric_names
+                }
+
+            shared = _shared_intervals(
+                scoped, statistics, metric_names, bootstrap, seed
+            )
         for metric, value in _numeric(pre).items():
             # Saved benign summaries use the scored subset. A change between
             # different scored cohorts would not be a paired utility effect.
@@ -252,24 +375,7 @@ def _native_changes(before, after, pairs, bootstrap, seed):
                 right = {
                     _identity(r): r for r in native_summaries([y for _, y in sampled])
                 }
-                if (
-                    bbq
-                    and metric
-                    in (
-                        "raw_bias",
-                        "bias_score",
-                        "signed_bias_macro",
-                        "absolute_bias_macro",
-                    )
-                    and (
-                        zero_denominator(left.get(key, {}), left)
-                        or zero_denominator(right.get(key, {}), right)
-                    )
-                ):
-                    return None
-                return _difference(
-                    left.get(key, {}).get(metric), right.get(key, {}).get(metric)
-                )
+                return difference(left, right, metric, key)
 
             observed = [
                 (x, y)
@@ -277,9 +383,21 @@ def _native_changes(before, after, pairs, bootstrap, seed):
                 if metric not in BENIGN_METRICS
                 or (x.get(metric) is not None and y.get(metric) is not None)
             ]
-            outcome = _measure(
-                value, post[metric], observed, statistic, bootstrap, seed
+            reuse = (
+                shared is not None
+                and metric not in BENIGN_METRICS
+                and _difference(value, post[metric]) is not None
             )
+            outcome = _measure(
+                value,
+                post[metric],
+                observed,
+                statistic,
+                0 if reuse else bootstrap,
+                seed,
+            )
+            if reuse:
+                outcome["uncertainty"] = shared[metric]
             if not complete:
                 outcome.update(
                     delta=None,
@@ -637,9 +755,21 @@ def _paired_profiles(pre, post, pairs, bootstrap, seed):
                     if nonlinear
                     else _macro([v for _, v in observed], metric)
                 )
-                outcome = _measure(
-                    paired_pre, paired_post, observed, statistic, bootstrap, seed
+                linear = (
+                    not nonlinear and _difference(paired_pre, paired_post) is not None
                 )
+                outcome = _measure(
+                    paired_pre,
+                    paired_post,
+                    observed,
+                    statistic,
+                    0 if linear else bootstrap,
+                    seed,
+                )
+                if linear:
+                    outcome["uncertainty"] = _macro_interval(
+                        observed, metric, bootstrap, seed
+                    )
                 outcome.update(
                     absolute_pre=value,
                     absolute_post=after_values[metric],
