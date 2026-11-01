@@ -62,7 +62,14 @@ def write_state(path, state):
 
 
 def verify_result(
-    directory, task, spec, rows, model_identity, generation_prompt_format="raw"
+    directory,
+    task,
+    spec,
+    rows,
+    model_identity,
+    generation_prompt_format="raw",
+    *,
+    expected_code_identity=None,
 ):
     """A successful child exit alone does not establish complete predictions."""
     run = json.loads((directory / "run.json").read_text())
@@ -71,6 +78,9 @@ def verify_result(
         json.loads(line)
         for line in (directory / "predictions.jsonl").read_text().splitlines()
     ]
+    scorer_identity = (
+        code_identity() if expected_code_identity is None else expected_code_identity
+    )
     expected = [row["id"] for row in rows]
     actual = [row.get("id") for row in predictions]
     digest = hashlib.sha256("\n".join(expected).encode()).hexdigest()
@@ -95,7 +105,7 @@ def verify_result(
         )
         or report.get("provenance") != run
         or report.get("predictions_sha256") != prediction_digest
-        or report.get("scorer_code_identity") != code_identity()
+        or report.get("scorer_code_identity") != scorer_identity
         or report.get("task") != task
         or report.get("rows") != len(rows)
         or report.get("code_identity", run.get("code_identity"))
