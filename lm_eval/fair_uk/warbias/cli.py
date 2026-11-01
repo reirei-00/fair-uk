@@ -5,6 +5,7 @@ report            whole-panel report for one checkpoint from saved phase runs
 calibrate         tau on prior-normalised development margins from a report
 tables            paper tables from a directory of panel reports
 compare           paired checkpoint effects using original + neutral runs
+baseline          native triplet/QA baselines, group and severity slices
 
 WarBias creation, translation, neutral rewriting and data review live in
 the FairForget producer repository. Fair-UK consumes their frozen releases.
@@ -102,6 +103,16 @@ def _parser():
         "--model", action="append", help="Model order (default: all, sorted)"
     )
 
+    baseline = commands.add_parser(
+        "baseline", help="Analyze saved triplet and QA baselines"
+    )
+    baseline.add_argument("--release", type=Path, required=True)
+    baseline.add_argument("--results", type=Path, required=True)
+    baseline.add_argument("--output", type=Path, required=True)
+    baseline.add_argument("--model", action="append")
+    baseline.add_argument("--bootstrap", type=int, default=1000)
+    baseline.add_argument("--seed", type=int, default=42)
+
     return parser
 
 
@@ -143,6 +154,27 @@ def main(argv=None):
             ),
         )
         result = args.output
+    elif args.command == "baseline":
+        from lm_eval.fair_uk.warbias.baseline import (
+            analyze_baselines,
+            write_baseline_results,
+        )
+
+        if args.output.resolve().is_relative_to(args.release.resolve()):
+            raise ValueError("Analysis outputs must stay outside the frozen release")
+        report = analyze_baselines(
+            args.release,
+            args.results,
+            models=args.model,
+            bootstrap=args.bootstrap,
+            seed=args.seed,
+        )
+        result = "\n".join(map(str, write_baseline_results(report, args.output)))
+        if any(
+            value["status"] == "validation_failed"
+            for value in report["models"].values()
+        ):
+            raise ValueError("Saved baseline validation failed; see summary.json")
     elif args.command == "tables":
         result = "\n".join(
             map(str, write_tables(args.results, args.output, args.model))
