@@ -2,7 +2,7 @@
 
 Fair-UK calculates the triplet and QA metrics, severity slices, group summaries
 and confidence intervals. The experiment walkthrough lives in
-[FairForget](https://github.com/reirei-00/fair_forget/blob/aaed72f54ba19f4678caa834f1940247ed701c76/notebooks/warbias_baseline.ipynb)
+[FairForget](https://github.com/reirei-00/fair_forget/blob/1cd958dd1c393c16f907fae681313117d8360c62/notebooks/warbias_baseline.ipynb)
 and imports `lm_eval.fair_uk.warbias.baseline`.
 
 Analyze verified saved runs with the library CLI:
