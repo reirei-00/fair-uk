@@ -95,6 +95,12 @@ def main(argv=None):
             sub.add_argument("--batch-size", default="auto")
             sub.add_argument("--chunk-size", type=int, default=32)
             sub.add_argument("--max-output-tokens", type=int, default=128)
+            sub.add_argument(
+                "--generation-prompt-format",
+                choices=("raw", "native-chat"),
+                default="raw",
+                help="Generation only: raw prompts or the checkpoint's native chat template",
+            )
         if command == "run-openai":
             from lm_eval.fair_uk.openai_runner import SNAPSHOTS
 
@@ -305,6 +311,7 @@ def main(argv=None):
         run["scoring_policy"] = args.answer_policy
     if args.command == "run":
         from lm_eval.api.registry import get_model
+        from lm_eval.fair_uk.evaluation_assets import evaluation_asset_identity
         from lm_eval.fair_uk.provenance import model_identity
         from lm_eval.fair_uk.runner import run_predictions
 
@@ -326,14 +333,27 @@ def main(argv=None):
                 for name in ("numpy", "transformers", "torch")
             },
         )
+        # Keep the legacy raw manifest shape; native chat is an explicit new
+        # generation identity. Likelihood protocols always retain their raw input.
+        if (
+            run["generation_config"] is not None
+            and args.generation_prompt_format != "raw"
+        ):
+            run["generation_config"]["prompt_format"] = args.generation_prompt_format
         manifest = args.output / "run.json"
-        if manifest.exists() and json.loads(manifest.read_text()) != run:
-            raise ValueError(
-                "Output belongs to a different run; use a new output directory"
-            )
+        previous_run = json.loads(manifest.read_text()) if manifest.exists() else None
+        if previous_run is not None:
+            declared = {
+                key: value
+                for key, value in previous_run.items()
+                if key != "evaluation_asset_identity"
+            }
+            if declared != run:
+                raise ValueError(
+                    "Output belongs to a different run; use a new output directory"
+                )
         if not manifest.exists() and (args.output / "predictions.jsonl").exists():
             raise ValueError("Checkpoint exists without a run manifest")
-        write_json(manifest, run)
         import random
 
         import numpy as np
@@ -345,12 +365,19 @@ def main(argv=None):
         backend = get_model(args.model).create_from_arg_string(
             args.model_args, {"batch_size": args.batch_size}
         )
+        run["evaluation_asset_identity"] = evaluation_asset_identity(
+            backend, rows, args.generation_prompt_format
+        )
+        if previous_run is not None and previous_run != run:
+            raise ValueError("Saved tokenizer or effective evaluation inputs differ")
+        write_json(manifest, run)
         predictions = run_predictions(
             backend,
             rows,
             args.output / "predictions.jsonl",
             args.chunk_size,
             max_output_tokens=args.max_output_tokens,
+            generation_prompt_format=args.generation_prompt_format,
         )
     elif args.command == "run-api":
         from lm_eval.fair_uk.api_runner import run as run_api

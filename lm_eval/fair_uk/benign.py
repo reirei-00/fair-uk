@@ -103,6 +103,19 @@ def validate_judgment(row, response, judgment):
         or not judgment["judge_identity"]
     ):
         raise ValueError("Judgment provenance is required")
+    provider = judgment["judge_identity"].get("provider")
+    if provider is not None and provider not in (
+        "openai-compatible",
+        "gemini",
+        "human",
+    ):
+        raise ValueError("Unsupported judgment provider")
+    if (
+        "raw_typed_response" in judgment
+        or "typed_response_sha256" in judgment
+        or "question_template_version" in judgment
+    ):
+        raise ValueError("Unsupported judgment evidence format")
     check_labels(judgment["labels"], response)
 
 
@@ -171,7 +184,7 @@ def judge_prompt(row, response):
     schema = {
         "refusal_label": "none|partial|full|unscorable",
         "criterion_scores": ["0|1|null"] * 3,
-        "flags": {flag: "true|false|null" for flag in FLAGS},
+        "flags": dict.fromkeys(FLAGS, "true|false|null"),
         "rationale": "Brief explanation tied to this response",
         "evidence_quotes": [],
     }
@@ -196,7 +209,7 @@ def parse_judgment(row, response, raw, judge_identity):
         labels = {
             "refusal_label": "unscorable",
             "criterion_scores": [None] * 3,
-            "flags": {flag: None for flag in FLAGS},
+            "flags": dict.fromkeys(FLAGS),
             "rationale": "Judge output failed schema/evidence validation: " + error,
             "evidence_quotes": [],
         }
@@ -210,7 +223,7 @@ def parse_judgment(row, response, raw, judge_identity):
 
 
 def main(argv=None):
-    from lm_eval.fair_uk.api_runner import estimate, run
+    from lm_eval.fair_uk.api_runner import estimate, normalize_config, run
     from lm_eval.fair_uk.expansion import read_rows, write_rows
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -223,7 +236,7 @@ def main(argv=None):
         "--config",
         type=Path,
         required=True,
-        help="Judge provider configuration; any supported generation model",
+        help="Hosted judge configuration",
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit-clusters-per-stratum", type=int)
@@ -235,6 +248,7 @@ def main(argv=None):
     )
     predictions = read_rows(args.predictions)
     attach_judgments(rows, predictions, [])  # Exact selected IDs before any request.
+    config = normalize_config(json.loads(args.config.read_text()))
     indexed = {p["id"]: p for p in predictions}
     requests = [
         {
@@ -244,7 +258,6 @@ def main(argv=None):
         }
         for r in rows
     ]
-    config = json.loads(args.config.read_text())
     if not args.execute:
         print(
             json.dumps(

@@ -7,6 +7,32 @@ from lm_eval.api.instance import Instance
 from lm_eval.fair_uk.data import family, prompts
 
 
+GENERATION_PROMPT_FORMATS = ("raw", "native-chat")
+
+
+def generation_context(backend, row, prompt_format="raw"):
+    """Render one user message through the configured harness chat template."""
+    if prompt_format not in GENERATION_PROMPT_FORMATS:
+        raise ValueError("Unsupported generation prompt format")
+    context = prompts(row)[0]["context"]
+    if prompt_format == "raw":
+        return context
+    apply_template = getattr(backend, "apply_chat_template", None)
+    if not callable(apply_template):
+        raise ValueError("Native-chat generation requires a backend chat template")  # noqa: TRY004 -- unsupported protocol configuration
+    try:
+        rendered = apply_template(
+            [{"role": "user", "content": context}], add_generation_prompt=True
+        )
+    except (NotImplementedError, AttributeError, ValueError) as exc:
+        raise ValueError(
+            "Native-chat generation requires a supported, configured chat template"
+        ) from exc
+    if not isinstance(rendered, str) or not rendered:
+        raise ValueError("Backend chat template must return a nonempty string")
+    return rendered
+
+
 def encode_request(backend, request, sentence=False):
     """Match the reference evaluators' boundary retokenization and sentence prefix."""
     tokenizer = getattr(backend, "tokenizer", None)
@@ -61,17 +87,19 @@ def encode_request(backend, request, sentence=False):
     return (key, context, continuation)
 
 
-def predict(backend, rows, max_output_tokens=128):
+def predict(backend, rows, max_output_tokens=128, generation_prompt_format="raw"):
     if not isinstance(max_output_tokens, int) or max_output_tokens < 1:
         raise ValueError("Output token limit must be a positive integer")
+    if generation_prompt_format not in GENERATION_PROMPT_FORMATS:
+        raise ValueError("Unsupported generation prompt format")
     kind = family(rows[0]["task"])
-    if kind in ("warbias", "warbias_benign"):
+    if kind in ("warbias", "warbias_benign", "winopron_uk"):
         requests = [
             Instance(
                 "generate_until",
                 row,
                 (
-                    prompts(row)[0]["context"],
+                    generation_context(backend, row, generation_prompt_format),
                     {
                         "until": [],
                         "max_gen_toks": max_output_tokens,
@@ -131,7 +159,14 @@ def predict(backend, rows, max_output_tokens=128):
     return predictions
 
 
-def run_predictions(backend, rows, path, chunk_size=32, max_output_tokens=128):
+def run_predictions(
+    backend,
+    rows,
+    path,
+    chunk_size=32,
+    max_output_tokens=128,
+    generation_prompt_format="raw",
+):
     """Resume only complete item records; the CLI validates the run manifest first."""
     if chunk_size < 1:
         raise ValueError("Chunk size must be positive")
@@ -152,7 +187,12 @@ def run_predictions(backend, rows, path, chunk_size=32, max_output_tokens=128):
     pending = [r for r in rows if r["id"] not in completed_ids]
     for start in range(0, len(pending), chunk_size):
         batch = pending[start : start + chunk_size]
-        predictions = predict(backend, batch, max_output_tokens=max_output_tokens)
+        predictions = predict(
+            backend,
+            batch,
+            max_output_tokens=max_output_tokens,
+            generation_prompt_format=generation_prompt_format,
+        )
         for row, prediction in zip(batch, predictions, strict=True):
             score_item(row, prediction)
         completed.extend(predictions)

@@ -199,6 +199,10 @@ def test_real_harness_generation_resume_and_offline_rescore(tmp_path, monkeypatc
     ]
     main(args)
     before = (output / "predictions.jsonl").read_bytes()
+    assert (
+        "prompt_format"
+        not in json.loads((output / "run.json").read_text())["generation_config"]
+    )
     main(args)
     assert (output / "predictions.jsonl").read_bytes() == before
     rescored = tmp_path / "rescored"
@@ -305,11 +309,125 @@ def test_real_harness_generation_resume_and_offline_rescore(tmp_path, monkeypatc
         main(args)
 
 
+def test_real_harness_native_template_identity_and_resume(tmp_path, monkeypatch):
+    source = tmp_path / "fixture.jsonl"
+    monkeypatch.setitem(REGISTRY, "warbias_uk", qa_fixture(source))
+    model = tmp_path / "model"
+    tiny_model(model)
+    from transformers import AutoTokenizer
+
+    from lm_eval.models.huggingface import HFLM
+
+    tokenizer = AutoTokenizer.from_pretrained(model, local_files_only=True)
+    tokenizer.chat_template = (
+        "{{ 'B' if enable_thinking else 'A' }} {{ messages[0]['content'] }} "
+        "{% if add_generation_prompt %}A{% endif %}"
+    )
+    tokenizer.save_pretrained(model)
+    rendered = []
+    generated = []
+    original = HFLM.apply_chat_template
+    original_generate = HFLM.generate_until
+
+    def apply_template(backend, history, add_generation_prompt=True):
+        result = original(backend, history, add_generation_prompt)
+        rendered.append((backend.chat_template_args, history, result))
+        return result
+
+    monkeypatch.setattr(HFLM, "apply_chat_template", apply_template)
+
+    def generate(backend, requests):
+        generated.append(len(requests))
+        return original_generate(backend, requests)
+
+    monkeypatch.setattr(HFLM, "generate_until", generate)
+    output = tmp_path / "native"
+    model_args = f"pretrained={model},device=cpu,enable_thinking=False"
+    args = [
+        "run",
+        "--task",
+        "warbias_uk",
+        "--input",
+        str(source),
+        "--model-args",
+        model_args,
+        "--output",
+        str(output),
+        "--batch-size",
+        "4",
+        "--max-output-tokens",
+        "1",
+        "--bootstrap",
+        "0",
+        "--generation-prompt-format",
+        "native-chat",
+    ]
+    main(args)
+    assert len(rendered) == 24  # Fingerprinting and generation render the same inputs.
+    assert rendered[:12] == rendered[12:]
+    assert generated == [12]
+    assert all(config == {"enable_thinking": False} for config, _, _ in rendered)
+    assert all(
+        history[0]["role"] == "user" and text.startswith("A ")
+        for _, history, text in rendered
+    )
+    manifest = json.loads((output / "run.json").read_text())
+    assert manifest["generation_config"]["prompt_format"] == "native-chat"
+    assert manifest["model_identity"]["parameters"]["enable_thinking"] is False
+    assert manifest["evaluation_asset_identity"]["native_template_sha256"]
+    before = (output / "predictions.jsonl").read_bytes()
+    main(args)
+    assert (output / "predictions.jsonl").read_bytes() == before
+    assert len(rendered) == 36  # Resume verifies assets without new generation.
+    assert generated == [12]
+    assert json.loads((output / "run.json").read_text()) == manifest
+    from lm_eval.fair_uk.suite import verify_result
+
+    verify_result(
+        output,
+        "warbias_uk",
+        REGISTRY["warbias_uk"],
+        load("warbias_uk", source),
+        manifest["model_identity"],
+        "native-chat",
+    )
+    with pytest.raises(ValueError, match="incomplete or inconsistent"):
+        verify_result(
+            output,
+            "warbias_uk",
+            REGISTRY["warbias_uk"],
+            load("warbias_uk", source),
+            manifest["model_identity"],
+            "raw",
+        )
+    with pytest.raises(ValueError, match="different run"):
+        main(["raw" if arg == "native-chat" else arg for arg in args])
+    with pytest.raises(ValueError, match="different run"):
+        main(
+            [
+                arg.replace("enable_thinking=False", "enable_thinking=True")
+                for arg in args
+            ]
+        )
+
+
 def test_real_harness_sentence_likelihood(tmp_path):
     tiny_model(tmp_path)
     from lm_eval.models.huggingface import HFLM
 
     model = HFLM(pretrained=str(tmp_path), device="cpu", batch_size=2)
+    with pytest.raises(ValueError, match="configured chat template"):
+        predict(
+            model,
+            [
+                {
+                    "id": "no-template",
+                    "task": "warbias_benign_en",
+                    "source": {"prompt": "A"},
+                }
+            ],
+            generation_prompt_format="native-chat",
+        )
     row = adapt(
         "stereoset_uk",
         {
