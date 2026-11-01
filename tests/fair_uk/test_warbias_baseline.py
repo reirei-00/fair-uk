@@ -355,7 +355,7 @@ def test_verified_complete_analysis_and_pinned_checkpoint_tampering(release, tmp
         if row["format"] == "qa" and row["status"] == "available"
     )
     output = tmp_path / "analysis"
-    assert len(api.write_baseline_results(report, output)) == 2
+    assert len(api.write_baseline_results(report, output)) == 6
     assert (output / "scores.csv").read_text().startswith("model,format,")
     path = results / "fixture/full/warbias_uk/run.json"
     run = json.loads(path.read_text())

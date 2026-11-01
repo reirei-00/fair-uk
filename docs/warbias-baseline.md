@@ -16,3 +16,7 @@ fair-uk-eval warbias baseline \
 
 `metric_definitions()` provides the definitions and units used by the notebook.
 `analyze_baselines()` returns the report; `write_baseline_results()` exports it.
+
+For runs from a frozen compatible collector, set `--inference-release` to that
+snapshot. The library checks its checksums and unchanged inference and native
+scoring code, then records the inference and analysis identities separately.

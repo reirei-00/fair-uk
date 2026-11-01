@@ -112,6 +112,11 @@ def _parser():
     baseline.add_argument("--model", action="append")
     baseline.add_argument("--bootstrap", type=int, default=1000)
     baseline.add_argument("--seed", type=int, default=42)
+    baseline.add_argument(
+        "--inference-release",
+        type=Path,
+        help="Frozen compatible collector used for the saved inference",
+    )
 
     return parser
 
@@ -160,7 +165,10 @@ def main(argv=None):
             write_baseline_results,
         )
 
-        if args.output.resolve().is_relative_to(args.release.resolve()):
+        frozen = [args.release]
+        if args.inference_release is not None:
+            frozen.append(args.inference_release)
+        if any(args.output.resolve().is_relative_to(path.resolve()) for path in frozen):
             raise ValueError("Analysis outputs must stay outside the frozen release")
         report = analyze_baselines(
             args.release,
@@ -168,6 +176,7 @@ def main(argv=None):
             models=args.model,
             bootstrap=args.bootstrap,
             seed=args.seed,
+            inference_release=args.inference_release,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(

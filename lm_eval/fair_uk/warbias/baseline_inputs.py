@@ -1,5 +1,6 @@
 """Frozen source, severity and checkpoint verification for saved baselines."""
 
+import csv
 import hashlib
 import json
 import math
@@ -27,6 +28,44 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _verify_severity_taxonomy(release, manifest, severity, binding):
+    if "taxonomy_sha256" not in binding:
+        return
+    taxonomy = (manifest.get("source") or {}).get("files", {}).get("taxonomy")
+    if (
+        not isinstance(taxonomy, dict)
+        or taxonomy.get("sha256") != binding["taxonomy_sha256"]
+    ):
+        raise ValueError("Severity taxonomy differs from the bound source taxonomy")
+    path = (release / "inputs" / taxonomy["path"]).resolve()
+    if not path.is_relative_to(release) or sha(path) != binding["taxonomy_sha256"]:
+        raise ValueError("Severity taxonomy differs from its binding")
+    with path.open(newline="") as stream:
+        records = list(csv.DictReader(stream))
+    by_case = {}
+    for record in records:
+        identity = record.get("public_case_id")
+        if not identity or identity in by_case:
+            raise ValueError("Source taxonomy requires unique case IDs")
+        by_case[identity] = record
+    if not severity.keys() <= by_case.keys():
+        raise ValueError("Severity cases are absent from the source taxonomy")
+    for identity, record in severity.items():
+        source = by_case[identity]
+        try:
+            mean = float(source["severity_mean_score"])
+            level = int(source["severity_level"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                "Source taxonomy has incomplete severity values"
+            ) from error
+        if (mean, level) != (
+            record["severity_mean_score"],
+            record["severity_level"],
+        ):
+            raise ValueError(f"{identity}: severity values differ from source taxonomy")
+
+
 def verify_baseline_run(
     directory,
     task,
@@ -36,6 +75,7 @@ def verify_baseline_run(
     *,
     smoke=False,
     collection_settings=None,
+    inference_code_identity=None,
 ):
     """Verify complete native outputs against their frozen source and checkpoint.
 
@@ -63,7 +103,10 @@ def verify_baseline_run(
         raise ValueError("Run checkpoint files differ from pinned weights or assets")
     if identity.get("parameters") != parameters:
         raise ValueError("Run model parameters differ")
-    if run.get("code_identity") != code_identity():
+    expected_code = (
+        code_identity() if inference_code_identity is None else inference_code_identity
+    )
+    if run.get("code_identity") != expected_code:
         raise ValueError("Run evaluator identity differs")
     limit = 1 if smoke else None
     if (
@@ -106,6 +149,7 @@ def verify_baseline_run(
         selected,
         identity,
         settings["generation_prompt_format"],
+        expected_code_identity=expected_code,
     )
     return load_verified_run(
         directory,
@@ -173,6 +217,7 @@ def _release_inputs(release):
         severity[row["case_id"]] = row
     if set(severity) != {case_id(row) for values in rows.values() for row in values}:
         raise ValueError("Severity records must cover exactly the selected cases")
+    _verify_severity_taxonomy(release, manifest, severity, binding)
     return release, manifest, profiles, rows, severity, binding
 
 

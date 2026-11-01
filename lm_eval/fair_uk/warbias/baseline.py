@@ -44,8 +44,18 @@ __all__ = [
 ]
 
 
-def _analyse_model(release, results, model, profiles, severity, draws, seed):
+def _analyse_model(
+    release,
+    results,
+    model,
+    profiles,
+    severity,
+    draws,
+    seed,
+    inference_code_identity=None,
+):
     from lm_eval.fair_uk.data import family
+    from lm_eval.fair_uk.provenance import fixed_inference_settings
 
     bundle = release / "inputs/manifest.json"
     tasks = read(bundle)["datasets"]
@@ -87,6 +97,7 @@ def _analyse_model(release, results, model, profiles, severity, draws, seed):
             expected,
             profiles[model]["model_identity"],
             smoke=False,
+            inference_code_identity=inference_code_identity,
         )
         for task in tasks
     }
@@ -102,6 +113,14 @@ def _analyse_model(release, results, model, profiles, severity, draws, seed):
     indexed = {
         (family(task), tasks[task]["language"]): run for task, run in runs.items()
     }
+    for kind in ("warbias_triplets", "warbias"):
+        left, right = (
+            indexed[kind, language].provenance["run"] for language in ("uk", "en")
+        )
+        if fixed_inference_settings(left) != fixed_inference_settings(right):
+            raise ValueError(
+                "Language runs use different inference or tokenizer identities"
+            )
     report = {
         "status": "complete",
         "runs": provenance,
@@ -190,7 +209,9 @@ def _analyse_model(release, results, model, profiles, severity, draws, seed):
     return report
 
 
-def analyze_baselines(release, results, models=None, bootstrap=1000, seed=42):
+def analyze_baselines(
+    release, results, models=None, bootstrap=1000, seed=42, *, inference_release=None
+):
     """Analyze complete saved baselines with native scoring and severity slices.
 
     ``release`` contains ``models.json`` and the frozen ``inputs/`` bundle.
@@ -198,12 +219,22 @@ def analyze_baselines(release, results, models=None, bootstrap=1000, seed=42):
     Missing task artifacts remain pending; inconsistent artifacts fail validation.
     All variants are averaged within their original claim component before
     between-component averaging and 95% percentile bootstrap resampling.
+    Set ``inference_release`` explicitly to reanalyze a checksum-bound collector
+    snapshot whose inference and native scoring code match this library.
     """
     if type(bootstrap) is not int or bootstrap < 0 or type(seed) is not int:
         raise ValueError(
             "Use a nonnegative integer bootstrap count and an integer seed"
         )
     release, manifest, profiles, _rows, severity, binding = _release_inputs(release)
+    from lm_eval.fair_uk.provenance import code_identity
+    from lm_eval.fair_uk.warbias.baseline_replay import validate_inference_release
+
+    inference_source = (
+        validate_inference_release(inference_release)
+        if inference_release is not None
+        else {"code_identity": code_identity(), "kind": "current_library"}
+    )
     results = Path(results).resolve()
     models = list(profiles) if models is None else list(models)
     if (
@@ -229,6 +260,8 @@ def analyze_baselines(release, results, models=None, bootstrap=1000, seed=42):
         "bootstrap": {"draws": bootstrap, "seed": seed, "level": 0.95},
         "language_pair": {"lg1": "uk", "lg2": "en"},
         "definitions": metric_definitions(),
+        "analysis_code_identity": code_identity(),
+        "inference_source": inference_source,
         "source": manifest.get("source"),
         "inputs": {
             "bundle_sha256": sha(release / "inputs/manifest.json"),
@@ -248,7 +281,14 @@ def analyze_baselines(release, results, models=None, bootstrap=1000, seed=42):
     for model in models:
         try:
             report["models"][model] = _analyse_model(
-                release, results, model, profiles, severity, bootstrap, seed
+                release,
+                results,
+                model,
+                profiles,
+                severity,
+                bootstrap,
+                seed,
+                inference_source["code_identity"],
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {
