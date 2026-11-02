@@ -20,3 +20,8 @@ fair-uk-eval warbias baseline \
 For runs from a frozen compatible collector, set `--inference-release` to that
 snapshot. The library checks its checksums and unchanged inference and native
 scoring code, then records the inference and analysis identities separately.
+
+Schema-1 native-chat fingerprints include the rendered prompts. For the known
+collector, language checks compare the verified checkpoint assets, model options
+and fixed runtime settings. The report records this policy and preserves the
+original input-bound hashes. Other collectors require matching tokenizer hashes.

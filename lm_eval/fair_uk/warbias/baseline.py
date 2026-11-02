@@ -14,6 +14,7 @@ from lm_eval.fair_uk.warbias.baseline_inputs import (
     release_overview,
     sha,
     verify_baseline_run,
+    verify_language_inference,
 )
 from lm_eval.fair_uk.warbias.baseline_reporting import (
     metric_definitions,
@@ -52,10 +53,9 @@ def _analyse_model(
     severity,
     draws,
     seed,
-    inference_code_identity=None,
+    inference_source,
 ):
     from lm_eval.fair_uk.data import family
-    from lm_eval.fair_uk.provenance import fixed_inference_settings
 
     bundle = release / "inputs/manifest.json"
     tasks = read(bundle)["datasets"]
@@ -97,7 +97,7 @@ def _analyse_model(
             expected,
             profiles[model]["model_identity"],
             smoke=False,
-            inference_code_identity=inference_code_identity,
+            inference_code_identity=inference_source["code_identity"],
         )
         for task in tasks
     }
@@ -113,17 +113,18 @@ def _analyse_model(
     indexed = {
         (family(task), tasks[task]["language"]): run for task, run in runs.items()
     }
+    language_inference = {}
     for kind in ("warbias_triplets", "warbias"):
         left, right = (
             indexed[kind, language].provenance["run"] for language in ("uk", "en")
         )
-        if fixed_inference_settings(left) != fixed_inference_settings(right):
-            raise ValueError(
-                "Language runs use different inference or tokenizer identities"
-            )
+        language_inference[kind] = verify_language_inference(
+            left, right, profiles[model]["model_identity"], expected, inference_source
+        )
     report = {
         "status": "complete",
         "runs": provenance,
+        "language_inference": language_inference,
         "triplets": {},
         "qa": {},
         "language_contrasts": [],
@@ -288,7 +289,7 @@ def analyze_baselines(
                 severity,
                 bootstrap,
                 seed,
-                inference_source["code_identity"],
+                inference_source,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {
