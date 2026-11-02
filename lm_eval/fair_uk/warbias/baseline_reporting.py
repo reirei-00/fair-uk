@@ -23,12 +23,12 @@ def metric_definitions():
             "50% aggregate balance; diagnostic",
         ),
         "distance_from_balance": (
-            "Absolute difference between raw SS and 0.5.",
+            "Absolute difference between the selected SS and 0.5.",
             "proportion",
             "lower",
         ),
         "association_margin": (
-            "Sentence score(S) minus sentence score(C), under per-token, per-UTF-8-byte or summed log likelihood.",
+            "Sentence score(S) minus sentence score(C), under the selected likelihood scoring; primary scoring subtracts matched neutral-group log likelihoods first.",
             "nats/token, nats/byte or nats",
             "signed; report direction",
         ),
@@ -147,6 +147,7 @@ def _unit(metric, scoring=None):
             "per_token": "nats/token",
             "per_byte": "nats/UTF-8 byte",
             "sum": "nats",
+            "prior_normalised": "nats",
         }[scoring]
     if metric in {"raw_bias", "bias_score"}:
         return "signed [-1,1]"
@@ -345,6 +346,20 @@ def _baseline_tables(report):
         )
         if result["status"] != "complete":
             continue
+        if result.get("primary_prior_normalised_ss") is not None:
+            primary = result["primary_prior_normalised_ss"]
+            tables["availability"].append(
+                {
+                    "model": model,
+                    "format": "triplets",
+                    "metric": "prior_normalised_ss",
+                    **{
+                        key: primary[key]
+                        for key in ("status", "reason", "missing_tasks")
+                        if key in primary
+                    },
+                }
+            )
         for scoring, languages in result["triplets"].items():
             for language, scopes in languages.items():
                 for scope in scopes:

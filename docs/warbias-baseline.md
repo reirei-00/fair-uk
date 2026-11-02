@@ -33,3 +33,14 @@ prompts, answer roles, pairing and components. Author-bound case/profile
 corrections change grouping and severity only; QA review-status updates are
 retained. Reports bind both releases and list changed IDs. Original native files
 remain unchanged.
+
+Add `--neutral-release CONTROL_RELEASE --neutral-results CONTROL_RESULTS` for
+prior-normalised SS. This separate release contains the two bilingual neutral
+tasks and binds the active triplet texts, profiles and source manifest. Its
+reviewed edits replace target mentions only; exact source spans and a bound rule
+catalog preserve the remaining text. Assistant acceptance is recorded separately
+from human dataset review. Original runs are verified first. Controls must use
+the same pinned assets and likelihood settings, with repeated smoke qualification.
+The report adds `scoring=prior_normalised`, including severity slices and paired
+language contrasts. Missing or invalid controls retain an explicit per-model
+status; existing raw and QA results remain available.
