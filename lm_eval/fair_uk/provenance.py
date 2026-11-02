@@ -128,6 +128,7 @@ def fixed_inference_settings(run):
                 "seed",
                 "batch_size",
                 "runtime_versions",
+                "inference_environment",
                 "harness_version",
                 "version",
                 "generation_config",

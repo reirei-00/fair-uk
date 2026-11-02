@@ -82,3 +82,45 @@ def test_warbias_rejects_adapter_mismatch(tmp_path):
             expected["parameters"],
             expected,
         )
+
+
+def test_vllm_environment_is_bound_to_resume_and_pairing(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from test_evaluation_assets import FakeBackend
+    from test_warbias_baseline import release as release_fixture
+
+    from lm_eval.fair_uk.__main__ import main
+
+    release = release_fixture.__wrapped__(tmp_path / "release")
+    backend = FakeBackend()
+    backend.generate_until = lambda requests: ["A"] * len(requests)
+    monkeypatch.setattr(
+        "lm_eval.api.registry.get_model",
+        lambda name: SimpleNamespace(create_from_arg_string=lambda *args: backend),
+    )
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "1")
+    args = [
+        "run",
+        "--task",
+        "warbias_uk",
+        "--dataset-bundle",
+        str(release / "inputs/manifest.json"),
+        "--model",
+        "vllm",
+        "--model-args",
+        "pretrained=fixture/base,revision=" + "a" * 40,
+        "--output",
+        str(tmp_path / "results"),
+        "--bootstrap",
+        "0",
+    ]
+    main(args)
+    before = json.loads((tmp_path / "results/run.json").read_text())
+    assert before["inference_environment"]["VLLM_BATCH_INVARIANT"] == "1"
+    monkeypatch.setenv("VLLM_BATCH_INVARIANT", "0")
+    with pytest.raises(ValueError, match="different run"):
+        main(args)
+    after = copy.deepcopy(before)
+    after["inference_environment"]["VLLM_BATCH_INVARIANT"] = "0"
+    assert paired_inference_settings(before) != paired_inference_settings(after)

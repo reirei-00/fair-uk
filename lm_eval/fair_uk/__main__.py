@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -347,6 +348,11 @@ def main(argv=None):
                 for name in ("numpy", "transformers", "torch")
             },
         )
+        if args.model == "vllm":
+            run["inference_environment"] = {
+                key: os.environ.get(key)
+                for key in ("VLLM_BATCH_INVARIANT", "VLLM_ENABLE_V1_MULTIPROCESSING")
+            }
         # Keep the legacy raw manifest shape; native chat is an explicit new
         # generation identity. Likelihood protocols always retain their raw input.
         if (
