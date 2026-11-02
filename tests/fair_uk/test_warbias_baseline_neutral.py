@@ -162,6 +162,7 @@ def test_primary_scores_use_matched_controls_and_retain_raw_results(
     _saved_runs(release, tmp_path / "results")
     _saved_runs(supplement, tmp_path / "neutral_results")
     report = _analyze(release, supplement, tmp_path)
+    assert report["units"]["association_margin"]["prior_normalised"] == "nats"
     model = report["models"]["fixture"]
     assert model["status"] == "complete", model
     assert model["primary_prior_normalised_ss"]["status"] == "available", model

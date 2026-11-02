@@ -321,6 +321,7 @@ def analyze_baselines(
                 "per_token": "nats/token",
                 "per_byte": "nats/UTF-8 byte",
                 "sum": "nats",
+                "prior_normalised": "nats",
             },
         },
         "weighting": "Equal original claim components after within-component averaging; keep profile and language variants together.",
