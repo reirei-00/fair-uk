@@ -7,8 +7,7 @@ tables            paper tables from a directory of panel reports
 compare           paired checkpoint effects using original + neutral runs
 baseline          native triplet/QA baselines, group and severity slices
 
-WarBias creation, translation, neutral rewriting and data review live in
-the FairForget producer repository. Fair-UK consumes their frozen releases.
+Commands consume frozen WarBias benchmark inputs and verified predictions.
 """
 
 import argparse
@@ -113,9 +112,6 @@ def _parser():
     baseline.add_argument("--bootstrap", type=int, default=1000)
     baseline.add_argument("--seed", type=int, default=42)
     baseline.add_argument(
-        "--phase", choices=("baseline", "before", "after"), default="baseline"
-    )
-    baseline.add_argument(
         "--triplet-ids",
         type=Path,
         help="One selected triplet ID per line; keep complete components",
@@ -217,7 +213,6 @@ def main(argv=None):
             neutral_release=args.neutral_release,
             neutral_results=args.neutral_results,
             qa_answer_policy=args.qa_answer_policy,
-            phase=args.phase,
             triplet_ids=_ids(args.triplet_ids) if args.triplet_ids else None,
             neutral_inference_release=args.neutral_inference_release,
         )

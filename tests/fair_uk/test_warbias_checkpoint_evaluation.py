@@ -1,4 +1,4 @@
-"""Post-training scores share the baseline implementation and frozen inputs."""
+"""WarBias checkpoint scores use one benchmark implementation and verified inputs."""
 
 import json
 from unittest import mock
@@ -15,7 +15,7 @@ from lm_eval.fair_uk.warbias.baseline import (
 )
 
 
-def test_no_update_after_scores_match_every_baseline_outcome(
+def test_checkpoint_and_baseline_apis_return_the_same_benchmark_report(
     release, supplement, tmp_path
 ):
     results, neutral = tmp_path / "results", tmp_path / "neutral-results"
@@ -29,22 +29,16 @@ def test_no_update_after_scores_match_every_baseline_outcome(
         "neutral_results": neutral,
         "qa_answer_policy": "abc_explicit_choice_v3",
     }
-    before = analyze_baselines(release, results, **settings)
-    after = analyze_checkpoints(release, results, phase="after", **settings)
-    assert after["kind"] == "warbias_checkpoint_evaluation"
-    assert after["phase"] == "after"
-    for field in (
-        "models",
-        "definitions",
-        "units",
-        "qa_parsing",
-        "primary_prior_normalised_ss",
-    ):
-        assert after[field] == before[field]
-    assert after["primary_prior_normalised_ss"]["status"] == "available"
+    baseline = analyze_baselines(release, results, **settings)
+    checkpoint = analyze_checkpoints(release, results, **settings)
+    assert checkpoint == baseline
+    assert checkpoint["kind"] == "warbias_checkpoint_evaluation"
+    assert "phase" not in checkpoint
+    assert "training" not in checkpoint
+    assert checkpoint["primary_prior_normalised_ss"]["status"] == "available"
 
 
-def test_heldout_selection_uses_same_ids_for_raw_and_neutral_and_keeps_all_qa(
+def test_subset_uses_same_ids_for_raw_and_neutral_and_keeps_all_qa(
     release, supplement, tmp_path
 ):
     results, neutral = tmp_path / "results", tmp_path / "neutral-results"
@@ -59,7 +53,6 @@ def test_heldout_selection_uses_same_ids_for_raw_and_neutral_and_keeps_all_qa(
     report = analyze_checkpoints(
         release,
         results,
-        phase="after",
         bootstrap=0,
         neutral_release=supplement,
         neutral_results=neutral,
@@ -140,7 +133,6 @@ def test_explicit_control_collector_identity_is_verified_and_reported(
         report = analyze_checkpoints(
             release,
             results,
-            phase="after",
             bootstrap=0,
             neutral_release=supplement,
             neutral_results=controls,
@@ -151,7 +143,7 @@ def test_explicit_control_collector_identity_is_verified_and_reported(
     assert report["primary_prior_normalised_ss"]["status"] == "available"
 
 
-def test_cli_selects_the_same_cohort_and_phase(release, tmp_path):
+def test_cli_selects_the_same_cohort(release, tmp_path):
     from lm_eval.fair_uk.warbias.cli import main
 
     ids = tmp_path / "ids.txt"
@@ -165,8 +157,6 @@ def test_cli_selects_the_same_cohort_and_phase(release, tmp_path):
             str(tmp_path / "missing"),
             "--output",
             str(tmp_path / "analysis"),
-            "--phase",
-            "after",
             "--triplet-ids",
             str(ids),
             "--qa-answer-policy",
@@ -176,5 +166,5 @@ def test_cli_selects_the_same_cohort_and_phase(release, tmp_path):
         ]
     )
     report = json.loads((tmp_path / "analysis/summary.json").read_text())
-    assert report["phase"] == "after"
+    assert "phase" not in report
     assert report["triplet_cohort"]["ids"] == ["C1"]

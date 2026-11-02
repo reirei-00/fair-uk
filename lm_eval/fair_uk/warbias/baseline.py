@@ -1,8 +1,8 @@
 """Analyze saved WarBias triplet/QA checkpoints without model inference.
 
 Use ``release_overview`` to verify and inspect frozen inputs,
-``metric_definitions`` for definitions and units, ``analyze_baselines`` for
-baseline and post-checkpoint analysis, and ``write_baseline_results`` for JSON/CSV exports.
+``metric_definitions`` for definitions and units, ``analyze_checkpoints`` for
+benchmark analysis, and ``write_baseline_results`` for JSON/CSV exports.
 """
 
 import hashlib
@@ -319,7 +319,6 @@ def analyze_checkpoints(
     neutral_results=None,
     qa_answer_policy="abc_option_text_v2",
     triplet_ids=None,
-    phase="baseline",
     neutral_inference_release=None,
 ):
     """Analyze complete saved checkpoints with baseline metrics and severity slices.
@@ -336,8 +335,6 @@ def analyze_checkpoints(
     ``neutral_release`` and ``neutral_results`` add source-bound control
     likelihoods after the original runs pass verification.
     """
-    if phase not in ("baseline", "before", "after"):
-        raise ValueError("Checkpoint phase must be baseline, before or after")
     if type(bootstrap) is not int or bootstrap < 0 or type(seed) is not int:
         raise ValueError(
             "Use a nonnegative integer bootstrap count and an integer seed"
@@ -398,9 +395,9 @@ def analyze_checkpoints(
     ):
         raise ValueError("Select unique known model IDs")
     report = {
-        "kind": "warbias_final_baseline",
+        "kind": "warbias_checkpoint_evaluation",
         "schema_version": 1,
-        "scope": "Unchanged checkpoint on the full released panel; not held-out intervention evidence.",
+        "scope": "Verified checkpoint scores on the selected WarBias benchmark rows.",
         "units": {
             "rates": "proportion",
             "signed_bias": "[-1,1]",
@@ -424,7 +421,7 @@ def analyze_checkpoints(
         },
         "primary_prior_normalised_ss": {
             "status": "unavailable",
-            "reason": "Neutral-group control scores are not included in this baseline run.",
+            "reason": "Neutral-group control scores are not included in this evaluation.",
         },
         "severity": {
             "case_scores_sha256": sha(
@@ -436,12 +433,6 @@ def analyze_checkpoints(
         "models": {},
         "qa_parsing": qa_parsing,
     }
-    if phase != "baseline":
-        report.update(
-            kind="warbias_checkpoint_evaluation",
-            phase=phase,
-            scope="Checkpoint scores; held-out claims require a matching training split binding.",
-        )
     if triplet_ids is not None:
         ids = sorted(triplet_ids)
         report["triplet_cohort"] = {
