@@ -125,6 +125,15 @@ def verify_language_inference(left, right, expected_identity, parameters, source
 
 
 def _verify_severity_taxonomy(release, manifest, severity, binding):
+    dataset_sha = binding.get("dataset_manifest_sha256")
+    if dataset_sha is not None:
+        source = manifest.get("source") or {}
+        if (
+            source.get("dataset_manifest_sha256") != dataset_sha
+            or source.get("files", {}).get("dataset_protocol", {}).get("sha256")
+            != dataset_sha
+        ):
+            raise ValueError("Severity differs from the bound dataset manifest")
     if "taxonomy_sha256" not in binding:
         return
     taxonomy = (manifest.get("source") or {}).get("files", {}).get("taxonomy")

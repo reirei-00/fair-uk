@@ -117,6 +117,11 @@ def _parser():
         type=Path,
         help="Frozen compatible collector used for the saved inference",
     )
+    baseline.add_argument(
+        "--metadata-release",
+        type=Path,
+        help="Prepared release with declared metadata corrections and unchanged inputs",
+    )
 
     return parser
 
@@ -168,6 +173,8 @@ def main(argv=None):
         frozen = [args.release]
         if args.inference_release is not None:
             frozen.append(args.inference_release)
+        if args.metadata_release is not None:
+            frozen.append(args.metadata_release)
         if any(args.output.resolve().is_relative_to(path.resolve()) for path in frozen):
             raise ValueError("Analysis outputs must stay outside the frozen release")
         report = analyze_baselines(
@@ -177,6 +184,7 @@ def main(argv=None):
             bootstrap=args.bootstrap,
             seed=args.seed,
             inference_release=args.inference_release,
+            metadata_release=args.metadata_release,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(

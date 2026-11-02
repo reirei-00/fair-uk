@@ -54,6 +54,7 @@ def _analyse_model(
     draws,
     seed,
     inference_source,
+    metadata=None,
 ):
     from lm_eval.fair_uk.data import family
 
@@ -121,6 +122,15 @@ def _analyse_model(
         language_inference[kind] = verify_language_inference(
             left, right, profiles[model]["model_identity"], expected, inference_source
         )
+    if metadata is not None:
+        from lm_eval.fair_uk.warbias.baseline_metadata import rebind_verified_run
+
+        indexed = {
+            (family(task), tasks[task]["language"]): rebind_verified_run(
+                run, metadata["rows"][task]
+            )
+            for task, run in runs.items()
+        }
     report = {
         "status": "complete",
         "runs": provenance,
@@ -211,7 +221,14 @@ def _analyse_model(
 
 
 def analyze_baselines(
-    release, results, models=None, bootstrap=1000, seed=42, *, inference_release=None
+    release,
+    results,
+    models=None,
+    bootstrap=1000,
+    seed=42,
+    *,
+    inference_release=None,
+    metadata_release=None,
 ):
     """Analyze complete saved baselines with native scoring and severity slices.
 
@@ -222,12 +239,15 @@ def analyze_baselines(
     between-component averaging and 95% percentile bootstrap resampling.
     Set ``inference_release`` explicitly to reanalyze a checksum-bound collector
     snapshot whose inference and native scoring code match this library.
+    ``metadata_release`` applies declared case/profile corrections after the
+    original native runs pass verification; prompts and predictions stay fixed.
     """
     if type(bootstrap) is not int or bootstrap < 0 or type(seed) is not int:
         raise ValueError(
             "Use a nonnegative integer bootstrap count and an integer seed"
         )
-    release, manifest, profiles, _rows, severity, binding = _release_inputs(release)
+    original = _release_inputs(release)
+    release, manifest, profiles, _rows, severity, binding = original
     from lm_eval.fair_uk.provenance import code_identity
     from lm_eval.fair_uk.warbias.baseline_replay import validate_inference_release
 
@@ -236,6 +256,19 @@ def analyze_baselines(
         if inference_release is not None
         else {"code_identity": code_identity(), "kind": "current_library"}
     )
+    metadata = None
+    active_release, active_manifest = release, manifest
+    if metadata_release is not None:
+        if inference_release is None:
+            raise ValueError(
+                "Metadata reanalysis requires an explicit frozen inference release"
+            )
+        from lm_eval.fair_uk.warbias.baseline_metadata import validate_metadata_release
+
+        corrected = _release_inputs(metadata_release)
+        metadata = validate_metadata_release(original, corrected)
+        active_release, active_manifest = corrected[:2]
+        severity, binding = metadata["severity"], metadata["binding"]
     results = Path(results).resolve()
     models = list(profiles) if models is None else list(models)
     if (
@@ -263,22 +296,31 @@ def analyze_baselines(
         "definitions": metric_definitions(),
         "analysis_code_identity": code_identity(),
         "inference_source": inference_source,
-        "source": manifest.get("source"),
+        "source": active_manifest.get("source"),
         "inputs": {
-            "bundle_sha256": sha(release / "inputs/manifest.json"),
-            "models_sha256": sha(release / "models.json"),
+            "bundle_sha256": sha(active_release / "inputs/manifest.json"),
+            "models_sha256": sha(active_release / "models.json"),
         },
         "primary_prior_normalised_ss": {
             "status": "unavailable",
             "reason": "Final-text bilingual neutral controls have not been constructed and reviewed.",
         },
         "severity": {
-            "case_scores_sha256": sha(release / "inputs/severity/case_scores.jsonl"),
-            "binding_sha256": sha(release / "inputs/severity/binding.json"),
+            "case_scores_sha256": sha(
+                active_release / "inputs/severity/case_scores.jsonl"
+            ),
+            "binding_sha256": sha(active_release / "inputs/severity/binding.json"),
             "binding": binding,
         },
         "models": {},
     }
+    if metadata is not None:
+        report["metadata_release"] = metadata["provenance"]
+        report["inference_inputs"] = {
+            "bundle_sha256": sha(release / "inputs/manifest.json"),
+            "models_sha256": sha(release / "models.json"),
+            "source": manifest.get("source"),
+        }
     for model in models:
         try:
             report["models"][model] = _analyse_model(
@@ -290,6 +332,7 @@ def analyze_baselines(
                 bootstrap,
                 seed,
                 inference_source,
+                metadata,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {
