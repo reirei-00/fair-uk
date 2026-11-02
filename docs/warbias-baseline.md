@@ -2,7 +2,7 @@
 
 Fair-UK calculates the triplet and QA metrics, severity slices, group summaries
 and confidence intervals. The companion repository's walkthrough is
-`warbias-artifacts/notebooks/warbias_baseline.ipynb`; it imports
+`warbias-artifacts/notebooks/08_warbias_baseline.ipynb`; it imports
 `lm_eval.fair_uk.warbias.baseline`.
 
 Analyze verified saved runs with the library CLI:
@@ -52,3 +52,22 @@ invalid. The same policy applies to every model and language. Native v2 runs
 are verified before rescoring; raw files and strict bare-letter diagnostics stay
 unchanged. The report records both policies, parse methods and changed choices.
 Omit this option to reproduce `abc_option_text_v2` results.
+
+## Post-training checkpoints
+
+`analyze_checkpoints()` shares the complete baseline scorer. Set `phase="after"`
+and use a prepared release whose model profiles name the verified merged exports.
+Use the same source rows, neutral controls, inference options and QA analysis
+policy in both phases. `analyze_baselines()` remains an alias with unchanged
+default behavior.
+
+Set `triplet_ids` to a frozen list of complete semantic components for held-out
+analysis. Full native files are verified before selection. Raw and neutral
+scores use the same IDs; all QA rows remain included. The report binds the
+selected IDs and their hash. Keep full-release diagnostic scores separate.
+
+The equivalent CLI adds `--phase after --triplet-ids held_out_ids.txt` to the
+baseline command. `--neutral-inference-release` declares a compatible frozen
+collector for control runs when it is separate from the control input release.
+Original run identities are preserved. These are checkpoint scores; paired
+intervention effects use the intervention evaluator.

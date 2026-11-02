@@ -113,6 +113,19 @@ def _parser():
     baseline.add_argument("--bootstrap", type=int, default=1000)
     baseline.add_argument("--seed", type=int, default=42)
     baseline.add_argument(
+        "--phase", choices=("baseline", "before", "after"), default="baseline"
+    )
+    baseline.add_argument(
+        "--triplet-ids",
+        type=Path,
+        help="One selected triplet ID per line; keep complete components",
+    )
+    baseline.add_argument(
+        "--neutral-inference-release",
+        type=Path,
+        help="Frozen collector used for control likelihoods",
+    )
+    baseline.add_argument(
         "--qa-answer-policy",
         choices=("abc_option_text_v2", "abc_explicit_choice_v3"),
         default="abc_option_text_v2",
@@ -189,6 +202,8 @@ def main(argv=None):
             frozen.append(args.metadata_release)
         if args.neutral_release is not None:
             frozen.append(args.neutral_release)
+        if args.neutral_inference_release is not None:
+            frozen.append(args.neutral_inference_release)
         if any(args.output.resolve().is_relative_to(path.resolve()) for path in frozen):
             raise ValueError("Analysis outputs must stay outside the frozen release")
         report = analyze_baselines(
@@ -202,6 +217,9 @@ def main(argv=None):
             neutral_release=args.neutral_release,
             neutral_results=args.neutral_results,
             qa_answer_policy=args.qa_answer_policy,
+            phase=args.phase,
+            triplet_ids=_ids(args.triplet_ids) if args.triplet_ids else None,
+            neutral_inference_release=args.neutral_inference_release,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(
