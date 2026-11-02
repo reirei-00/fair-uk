@@ -91,6 +91,17 @@ def scope_selections(items):
             [r for r in items if r["severity_level"] == level],
         )
 
+    for actor in ("idp", "veteran"):
+        for level in range(1, 6):
+            yield (
+                {"scope": "actor_severity", "actor": actor, "severity_level": level},
+                [
+                    r
+                    for r in items
+                    if r["actor"] == actor and r["severity_level"] == level
+                ],
+            )
+
 
 def case_id(row):
     source = row.get("source", {})
@@ -200,7 +211,7 @@ def verify_qa_formula(verified, results, *, parsed_predictions=None):
         answer_policy="abc_option_text_v2",
     )["warbias_bbq"]["scopes"]
     for row in results:
-        if row["scope"] == "severity" or row["status"] == "empty":
+        if row["scope"] not in {"overall", "actor"} or row["status"] == "empty":
             continue
         matches = [
             scope

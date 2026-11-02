@@ -62,3 +62,8 @@ Use `--triplet-ids selected_ids.txt` for the equivalent CLI option.
 `--neutral-inference-release` declares a compatible frozen collector for control
 runs when it is separate from the control input release. Original run identities
 are preserved.
+
+Severity exports include `scope=actor_severity` with `actor=idp` or
+`actor=veteran` and `severity_level=1..5`. Each slice uses its own component
+weights and bootstrap interval. Empty slices stay empty; a single component
+has no interval. `scope=severity` retains the combined-group results.
