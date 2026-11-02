@@ -48,7 +48,7 @@ def metric_definitions():
             "higher",
         ),
         "qa_choice_rates": (
-            "Stereotype-consistent, counter-stereotype, unknown and invalid rates under the recorded ABC/option-text parser.",
+            "Stereotype-consistent, counter-stereotype, unknown and invalid rates under the selected answer parser.",
             "proportion",
             "interpret by evidence condition",
         ),

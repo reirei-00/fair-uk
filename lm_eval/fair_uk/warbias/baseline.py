@@ -57,6 +57,7 @@ def _analyse_model(
     metadata=None,
     neutral=None,
     neutral_results=None,
+    qa_answer_policy="abc_option_text_v2",
 ):
     from lm_eval.fair_uk.data import family
 
@@ -178,6 +179,14 @@ def _analyse_model(
                     ),
                 }
             )
+    from lm_eval.fair_uk.warbias.baseline_answers import rescore_qa
+
+    parsed_predictions, parsing = {}, {}
+    for language in ("uk", "en"):
+        key = ("warbias", language)
+        indexed[key], parsed_predictions[language], parsing[language] = rescore_qa(
+            indexed[key], qa_answer_policy
+        )
     languages = {
         language: qa_records(indexed["warbias", language], severity)
         for language in ("uk", "en")
@@ -194,7 +203,11 @@ def _analyse_model(
                 }
                 for scope, selected in scope_selections(subset)
             ]
-        verify_qa_formula(indexed["warbias", language], scopes)
+        verify_qa_formula(
+            indexed["warbias", language],
+            scopes,
+            parsed_predictions=parsed_predictions[language],
+        )
         report["qa"][language] = {
             "gender_age_contrasts": {
                 "status": "unavailable",
@@ -203,6 +216,8 @@ def _analyse_model(
             "scopes": scopes,
             "aligned_minus_conflicting_accuracy": evidence_gap(items, draws, seed),
         }
+        if parsing[language] is not None:
+            report["qa"][language]["parsing"] = parsing[language]
     for condition in ("ambiguous", "stereotype_aligned", "stereotype_conflicting"):
         for scope, left in scope_selections(
             [row for row in languages["uk"] if row["condition"] == condition]
@@ -251,6 +266,7 @@ def analyze_baselines(
     metadata_release=None,
     neutral_release=None,
     neutral_results=None,
+    qa_answer_policy="abc_option_text_v2",
 ):
     """Analyze complete saved baselines with native scoring and severity slices.
 
@@ -272,6 +288,9 @@ def analyze_baselines(
         )
     if (neutral_release is None) != (neutral_results is None):
         raise ValueError("Provide both the neutral release and its results")
+    from lm_eval.fair_uk.warbias.baseline_answers import policy_definition
+
+    qa_parsing = policy_definition(qa_answer_policy)
     original = _release_inputs(release)
     release, manifest, profiles, _rows, severity, binding = original
     from lm_eval.fair_uk.provenance import code_identity
@@ -347,6 +366,7 @@ def analyze_baselines(
             "binding": binding,
         },
         "models": {},
+        "qa_parsing": qa_parsing,
     }
     if metadata is not None:
         report["metadata_release"] = metadata["provenance"]
@@ -371,6 +391,7 @@ def analyze_baselines(
                 metadata,
                 neutral,
                 neutral_results,
+                qa_answer_policy,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {

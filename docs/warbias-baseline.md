@@ -44,3 +44,11 @@ the same pinned assets and likelihood settings, with repeated smoke qualificatio
 The report adds `scoring=prior_normalised`, including severity slices and paired
 language contrasts. Missing or invalid controls retain an explicit per-model
 status; existing raw and QA results remain available.
+
+Use `--qa-answer-policy abc_explicit_choice_v3` to parse explicit answer prefixes
+and a separate first answer block before an explanation. Exact unique options
+may have one terminal period. Conflicting choices and unmatched prose remain
+invalid. The same policy applies to every model and language. Native v2 runs
+are verified before rescoring; raw files and strict bare-letter diagnostics stay
+unchanged. The report records both policies, parse methods and changed choices.
+Omit this option to reproduce `abc_option_text_v2` results.

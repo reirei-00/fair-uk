@@ -113,6 +113,12 @@ def _parser():
     baseline.add_argument("--bootstrap", type=int, default=1000)
     baseline.add_argument("--seed", type=int, default=42)
     baseline.add_argument(
+        "--qa-answer-policy",
+        choices=("abc_option_text_v2", "abc_explicit_choice_v3"),
+        default="abc_option_text_v2",
+        help="Analysis policy for verified saved QA responses",
+    )
+    baseline.add_argument(
         "--inference-release",
         type=Path,
         help="Frozen compatible collector used for the saved inference",
@@ -195,6 +201,7 @@ def main(argv=None):
             metadata_release=args.metadata_release,
             neutral_release=args.neutral_release,
             neutral_results=args.neutral_results,
+            qa_answer_policy=args.qa_answer_policy,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(
