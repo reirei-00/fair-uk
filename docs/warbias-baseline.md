@@ -63,7 +63,7 @@ Use `--triplet-ids selected_ids.txt` for the equivalent CLI option.
 runs when it is separate from the control input release. Original run identities
 are preserved.
 
-Severity exports include `scope=actor_severity` with `actor=idp` or
+Primary SS and QA accuracy exports include `scope=actor_severity` with `actor=idp` or
 `actor=veteran` and `severity_level=1..5`. Each slice uses its own component
 weights and bootstrap interval. Empty slices stay empty; a single component
 has no interval. `scope=severity` retains the combined-group results.

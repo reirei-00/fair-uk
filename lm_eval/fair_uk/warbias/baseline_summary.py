@@ -91,16 +91,29 @@ def scope_selections(items):
             [r for r in items if r["severity_level"] == level],
         )
 
-    for actor in ("idp", "veteran"):
-        for level in range(1, 6):
-            yield (
-                {"scope": "actor_severity", "actor": actor, "severity_level": level},
+
+def group_severity_summary(items, field, draws, seed):
+    """Summarize one selected outcome within each actor and severity level."""
+    return [
+        {
+            "scope": "actor_severity",
+            "actor": actor,
+            "severity_level": level,
+            **summary(
                 [
                     r
                     for r in items
                     if r["actor"] == actor and r["severity_level"] == level
                 ],
-            )
+                (field,),
+                "rate",
+                draws=draws,
+                seed=seed,
+            ),
+        }
+        for actor in ("idp", "veteran")
+        for level in range(1, 6)
+    ]
 
 
 def case_id(row):

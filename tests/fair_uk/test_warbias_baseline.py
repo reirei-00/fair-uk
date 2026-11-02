@@ -398,21 +398,18 @@ def test_group_severity_filters_before_component_weighting():
         row("other-level", "third", 0.0, level=4),
     ]
     selected = {
-        (scope["actor"], scope["severity_level"]): values
-        for scope, values in analysis.scope_selections(items)
-        if scope["scope"] == "actor_severity"
+        (scope["actor"], scope["severity_level"]): scope
+        for scope in analysis.group_severity_summary(items, "accuracy", 100, 42)
     }
     assert len(selected) == 10
-    idp = analysis.summary(selected["idp", 3], ("accuracy",), "difference", draws=100)
-    veteran = analysis.summary(
-        selected["veteran", 3], ("accuracy",), "difference", draws=100
-    )
+    idp, veteran = selected["idp", 3], selected["veteran", 3]
     assert (idp["rows"], idp["components"]) == (10, 2)
     assert idp["metrics"]["accuracy"]["estimate"] == 0.5
     assert idp["metrics"]["accuracy"]["ci95"] == [0.0, 1.0]
     assert veteran["metrics"]["accuracy"]["estimate"] == 0.0
     assert veteran["metrics"]["accuracy"]["ci95"] is None
-    assert selected["veteran", 4] == []
+    assert selected["veteran", 4]["status"] == "empty"
+    assert selected["veteran", 4]["metrics"] == {}
 
 
 def test_group_severity_counts_and_exports(release, tmp_path):
@@ -453,6 +450,10 @@ def test_group_severity_counts_and_exports(release, tmp_path):
     for name in ("scores.csv", "evidence_gaps.csv", "language_contrasts.csv"):
         with (output / name).open() as stream:
             rows = [r for r in csv.DictReader(stream) if r["scope"] == "actor_severity"]
+        if name != "scores.csv":
+            assert not rows
+            continue
+        assert {r["metric"] for r in rows} == {"accuracy", ""}
         assert {r["actor"] for r in rows} == {"idp", "veteran"}
         assert all(r["severity_level"] for r in rows)
         assert any(r["status"] == "empty" and r["estimate"] == "" for r in rows)
