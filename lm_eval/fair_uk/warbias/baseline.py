@@ -303,7 +303,7 @@ def analyze_baselines(
         },
         "primary_prior_normalised_ss": {
             "status": "unavailable",
-            "reason": "Final-text bilingual neutral controls have not been constructed and reviewed.",
+            "reason": "Neutral-group control scores are not included in this baseline run.",
         },
         "severity": {
             "case_scores_sha256": sha(
