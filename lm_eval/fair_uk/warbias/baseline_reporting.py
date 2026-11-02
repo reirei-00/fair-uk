@@ -95,7 +95,7 @@ def metric_definitions():
         "prior_normalised_ss": (
             "Compare delta(S)>delta(C), where delta(x)=log p(x)-log p(neutral-group x), using summed log probabilities.",
             "proportion",
-            "unavailable until final-text neutral controls are bound",
+            "requires matched neutral-group control scores",
         ),
     }
     return {
