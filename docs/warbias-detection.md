@@ -2,10 +2,8 @@
 
 Code: `lm_eval/fair_uk/warbias/`. Command: `fair-uk-eval warbias <command>`.
 The pipeline measures stereotype preference on the annotated WarBias triplet
-panel (UK and EN) from saved sentence likelihoods. It consumes frozen evaluation inputs. WarBias creation, translation, neutral
-rewriting and data review are maintained in the `warbias/` subproject of the
-separate FairForget repository. See [the paper workflow](paper-reproduction.md) for the repository
-handoff and before/after evaluation.
+panel (UK and EN) from saved sentence likelihoods. It consumes frozen benchmark
+inputs with recorded source identities.
 
 ## Installation
 

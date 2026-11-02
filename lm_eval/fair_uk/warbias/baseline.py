@@ -1,10 +1,12 @@
-"""Analyze saved WarBias triplet/QA baselines without model inference.
+"""Analyze saved WarBias triplet/QA checkpoints without model inference.
 
 Use ``release_overview`` to verify and inspect frozen inputs,
-``metric_definitions`` for definitions and units, ``analyze_baselines`` for
-saved-run analysis, and ``write_baseline_results`` for JSON/CSV exports.
+``metric_definitions`` for definitions and units, ``analyze_checkpoints`` for
+benchmark analysis, and ``write_baseline_results`` for JSON/CSV exports.
 """
 
+import hashlib
+import json
 from pathlib import Path
 
 from lm_eval.fair_uk.warbias.baseline_inputs import (
@@ -38,11 +40,46 @@ from lm_eval.fair_uk.warbias.baseline_summary import (
 __all__ = [
     "SCORING_SETTINGS",
     "analyze_baselines",
+    "analyze_checkpoints",
     "metric_definitions",
     "release_overview",
     "verify_baseline_run",
     "write_baseline_results",
 ]
+
+
+def _select(items, triplet_ids):
+    return (
+        items
+        if triplet_ids is None
+        else [row for row in items if row["id"] in triplet_ids]
+    )
+
+
+def _cohort(rows, triplet_ids):
+    if triplet_ids is None:
+        return None
+    from lm_eval.fair_uk.data import family
+
+    ids = list(triplet_ids)
+    if (
+        not ids
+        or len(set(ids)) != len(ids)
+        or any(not isinstance(item, str) for item in ids)
+    ):
+        raise ValueError("Select unique nonempty triplet IDs")
+    selected = set(ids)
+    for task, items in rows.items():
+        if family(task) != "warbias_triplets":
+            continue
+        if not selected <= {row["id"] for row in items}:
+            raise ValueError("Selected triplet IDs are absent from a language panel")
+        membership = {}
+        for row in items:
+            membership.setdefault(row["cluster"], set()).add(row["id"] in selected)
+        if any(len(values) != 1 for values in membership.values()):
+            raise ValueError("Triplet selection must keep complete semantic components")
+    return selected
 
 
 def _analyse_model(
@@ -58,6 +95,8 @@ def _analyse_model(
     neutral=None,
     neutral_results=None,
     qa_answer_policy="abc_option_text_v2",
+    triplet_ids=None,
+    neutral_inference_source=None,
 ):
     from lm_eval.fair_uk.data import family
 
@@ -145,8 +184,9 @@ def _analyse_model(
     }
     for scoring in ("per_token", "per_byte", "sum"):
         languages = {
-            language: triplet_items(
-                indexed["warbias_triplets", language], severity, scoring
+            language: _select(
+                triplet_items(indexed["warbias_triplets", language], severity, scoring),
+                triplet_ids,
             )
             for language in ("uk", "en")
         }
@@ -242,10 +282,21 @@ def _analyse_model(
 
         try:
             status, languages = analyze_neutral_model(
-                neutral, neutral_results, model, indexed, severity, draws, seed
+                neutral,
+                neutral_results,
+                model,
+                indexed,
+                severity,
+                draws,
+                seed,
+                inference_source=neutral_inference_source,
             )
             report["primary_prior_normalised_ss"] = status
             if languages is not None:
+                languages = {
+                    language: _select(items, triplet_ids)
+                    for language, items in languages.items()
+                }
                 add_neutral_results(report, languages, draws, seed)
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["primary_prior_normalised_ss"] = {
@@ -255,7 +306,7 @@ def _analyse_model(
     return report
 
 
-def analyze_baselines(
+def analyze_checkpoints(
     release,
     results,
     models=None,
@@ -267,8 +318,10 @@ def analyze_baselines(
     neutral_release=None,
     neutral_results=None,
     qa_answer_policy="abc_option_text_v2",
+    triplet_ids=None,
+    neutral_inference_release=None,
 ):
-    """Analyze complete saved baselines with native scoring and severity slices.
+    """Analyze complete saved checkpoints with baseline metrics and severity slices.
 
     ``release`` contains ``models.json`` and the frozen ``inputs/`` bundle.
     ``results`` contains ``MODEL/full/TASK`` plus runner qualification receipts.
@@ -301,6 +354,15 @@ def analyze_baselines(
         if inference_release is not None
         else {"code_identity": code_identity(), "kind": "current_library"}
     )
+    neutral_inference_source = (
+        validate_inference_release(neutral_inference_release)
+        if neutral_inference_release is not None
+        else None
+    )
+    if neutral_inference_source is not None and neutral_release is None:
+        raise ValueError(
+            "A neutral inference release requires neutral inputs and results"
+        )
     metadata = None
     active_release, active_manifest = release, manifest
     if metadata_release is not None:
@@ -321,6 +383,9 @@ def analyze_baselines(
         neutral = neutral_release_inputs(
             neutral_release, corrected if metadata is not None else original
         )
+    triplet_ids = _cohort(
+        corrected[3] if metadata is not None else original[3], triplet_ids
+    )
     results = Path(results).resolve()
     models = list(profiles) if models is None else list(models)
     if (
@@ -330,9 +395,9 @@ def analyze_baselines(
     ):
         raise ValueError("Select unique known model IDs")
     report = {
-        "kind": "warbias_final_baseline",
+        "kind": "warbias_checkpoint_evaluation",
         "schema_version": 1,
-        "scope": "Unchanged checkpoint on the full released panel; not held-out intervention evidence.",
+        "scope": "Verified checkpoint scores on the selected WarBias benchmark rows.",
         "units": {
             "rates": "proportion",
             "signed_bias": "[-1,1]",
@@ -356,7 +421,7 @@ def analyze_baselines(
         },
         "primary_prior_normalised_ss": {
             "status": "unavailable",
-            "reason": "Neutral-group control scores are not included in this baseline run.",
+            "reason": "Neutral-group control scores are not included in this evaluation.",
         },
         "severity": {
             "case_scores_sha256": sha(
@@ -368,6 +433,17 @@ def analyze_baselines(
         "models": {},
         "qa_parsing": qa_parsing,
     }
+    if triplet_ids is not None:
+        ids = sorted(triplet_ids)
+        report["triplet_cohort"] = {
+            "ids": ids,
+            "rows_per_language": len(ids),
+            "sha256": hashlib.sha256(
+                json.dumps(ids, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "selection": "Complete semantic components, applied after full native run verification.",
+            "qa_selection": "All QA rows remain included.",
+        }
     if metadata is not None:
         report["metadata_release"] = metadata["provenance"]
         report["inference_inputs"] = {
@@ -377,6 +453,8 @@ def analyze_baselines(
         }
     if neutral is not None:
         report["neutral_release"] = neutral["provenance"]
+    if neutral_inference_source is not None:
+        report["neutral_inference_source"] = neutral_inference_source
     for model in models:
         try:
             report["models"][model] = _analyse_model(
@@ -392,6 +470,8 @@ def analyze_baselines(
                 neutral,
                 neutral_results,
                 qa_answer_policy,
+                triplet_ids,
+                neutral_inference_source,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {
@@ -416,3 +496,6 @@ def analyze_baselines(
             else "See each model's neutral-control coverage and validation status.",
         }
     return report
+
+
+analyze_baselines = analyze_checkpoints

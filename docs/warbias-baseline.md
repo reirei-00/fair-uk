@@ -1,9 +1,7 @@
 # WarBias baseline metrics
 
 Fair-UK calculates the triplet and QA metrics, severity slices, group summaries
-and confidence intervals. The companion repository's walkthrough is
-`warbias-artifacts/notebooks/warbias_baseline.ipynb`; it imports
-`lm_eval.fair_uk.warbias.baseline`.
+and confidence intervals for verified WarBias benchmark predictions.
 
 Analyze verified saved runs with the library CLI:
 
@@ -14,8 +12,9 @@ fair-uk-eval warbias baseline \
   --output /path/to/analysis
 ```
 
-`metric_definitions()` provides the definitions and units used by the notebook.
-`analyze_baselines()` returns the report; `write_baseline_results()` exports it.
+`metric_definitions()` provides metric definitions and units.
+`analyze_checkpoints()` returns the report; `write_baseline_results()` exports it.
+`analyze_baselines()` is an alias for the same scorer.
 
 For runs from a frozen compatible collector, set `--inference-release` to that
 snapshot. The library checks its checksums and unchanged inference and native
@@ -52,3 +51,14 @@ invalid. The same policy applies to every model and language. Native v2 runs
 are verified before rescoring; raw files and strict bare-letter diagnostics stay
 unchanged. The report records both policies, parse methods and changed choices.
 Omit this option to reproduce `abc_option_text_v2` results.
+
+## Benchmark subsets
+
+Set `triplet_ids` to select complete semantic components. Full native files are
+verified before selection. Raw and neutral scores use the same IDs; all QA rows
+remain included. The report records the selected IDs and their hash.
+
+Use `--triplet-ids selected_ids.txt` for the equivalent CLI option.
+`--neutral-inference-release` declares a compatible frozen collector for control
+runs when it is separate from the control input release. Original run identities
+are preserved.

@@ -265,7 +265,9 @@ def _inference(run):
     return identity
 
 
-def analyze_neutral_model(neutral, results, model, original, severity, draws, seed):
+def analyze_neutral_model(
+    neutral, results, model, original, severity, draws, seed, *, inference_source=None
+):
     """Verify and score one model's complete neutral supplement."""
     from lm_eval.fair_uk.warbias.baseline_replay import validate_inference_release
 
@@ -296,7 +298,7 @@ def analyze_neutral_model(neutral, results, model, original, severity, draws, se
         or binding.get("settings") != SCORING_SETTINGS
     ):
         raise ValueError("Neutral collection lacks a matching repeated qualification")
-    source = (
+    source = inference_source or (
         validate_inference_release(release)
         if (release / "checksums.json").exists()
         else {"code_identity": code_identity(), "kind": "current_library"}
