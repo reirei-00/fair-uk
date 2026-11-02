@@ -190,13 +190,13 @@ def qa_summary(items, condition, draws, seed):
     return result
 
 
-def verify_qa_formula(verified, results):
+def verify_qa_formula(verified, results, *, parsed_predictions=None):
     """Cross-check point estimates against the maintained native QA adaptation."""
     from lm_eval.fair_uk.baseline_metrics import baseline_profile
 
     scopes = baseline_profile(
         verified.selected_rows,
-        verified.raw_predictions,
+        verified.raw_predictions if parsed_predictions is None else parsed_predictions,
         answer_policy="abc_option_text_v2",
     )["warbias_bbq"]["scopes"]
     for row in results:

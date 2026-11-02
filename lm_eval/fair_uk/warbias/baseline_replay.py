@@ -17,6 +17,7 @@ _ANALYSIS_FILES = {
     "fair_uk/warbias/baseline_replay.py",
     "fair_uk/warbias/baseline_metadata.py",
     "fair_uk/warbias/baseline_neutral.py",
+    "fair_uk/warbias/baseline_answers.py",
 }
 _HARNESS_FILES = (
     "api/model.py",
