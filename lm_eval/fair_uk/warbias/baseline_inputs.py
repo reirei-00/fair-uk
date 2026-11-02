@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 from lm_eval.fair_uk.warbias.baseline_summary import case_id
@@ -19,6 +20,10 @@ SCORING_SETTINGS = {
     "seed": 42,
 }
 
+_INPUT_BOUND_TOKENIZER_SOURCE = (
+    "337aefbed326422267ed6c54c68f1854306dd3a8a8870df30c8fb40a9cbd0a4b"
+)
+
 
 def read(path):
     return json.loads(Path(path).read_text())
@@ -26,6 +31,97 @@ def read(path):
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def verify_language_inference(left, right, expected_identity, parameters, source):
+    """Compare language runs without treating rendered prompts as tokenizers.
+
+    The recorded schema-1 native-chat fingerprint includes rendered input text.
+    That known collector requires identical pinned checkpoint assets and model
+    options instead. Its original input-bound fingerprints remain in the report.
+    """
+    from lm_eval.fair_uk.provenance import fixed_inference_settings
+
+    settings = [fixed_inference_settings(run) for run in (left, right)]
+    if settings[0] == settings[1]:
+        return {"policy": "identical_fixed_inference_settings"}
+    reason = "Language runs use different inference or tokenizer identities"
+    code = source.get("code_identity") or {}
+    source_hash = code.get("fair_uk/evaluation_assets.py")
+    if source_hash != _INPUT_BOUND_TOKENIZER_SOURCE:
+        raise ValueError(reason)
+    assets = [run.get("evaluation_asset_identity") for run in (left, right)]
+    for run, asset in zip((left, right), assets, strict=True):
+        if (
+            run.get("code_identity") != code
+            or run.get("model_backend") != "vllm"
+            or run.get("protocol") != "strict_abc_generation_v1"
+            or (run.get("generation_config") or {}).get("prompt_format")
+            != "native-chat"
+            or not isinstance(asset, dict)
+            or type(asset.get("schema_version")) is not int
+            or asset["schema_version"] != 1
+            or asset.get("protocol") != run["protocol"]
+            or asset.get("input_mode") != "generation"
+            or asset.get("generation_prompt_format") != "native-chat"
+            or asset.get("tokenizer_serialization")
+            not in {"fast_tokenizer_json", "sentencepiece_model_proto"}
+            or type(asset.get("rows")) is not int
+            or asset["rows"] <= 0
+            or any(
+                not isinstance(asset.get(key), str)
+                or re.fullmatch(r"[0-9a-f]{64}", asset[key]) is None
+                for key in (
+                    "tokenizer_sha256",
+                    "input_sha256",
+                    "native_template_sha256",
+                )
+            )
+        ):
+            raise ValueError(reason)
+    hashes = expected_identity.get("local_files_sha256")
+    if (
+        not isinstance(hashes, dict)
+        or "tokenizer_config.json" not in hashes
+        or not {"tokenizer.json", "tokenizer.model"}.intersection(hashes)
+        or any(
+            not isinstance(name, str)
+            or not name
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            for name, digest in hashes.items()
+        )
+        or left.get("model_identity") != right.get("model_identity")
+        or any(
+            (run.get("model_identity") or {}).get("local_files_sha256") != hashes
+            or (run.get("model_identity") or {}).get("parameters") != parameters
+            for run in (left, right)
+        )
+        or assets[0]["tokenizer_serialization"] != assets[1]["tokenizer_serialization"]
+    ):
+        raise ValueError(reason)
+    remaining = [
+        {key: value for key, value in setting.items() if key != "tokenizer_identity"}
+        for setting in settings
+    ]
+    if remaining[0] != remaining[1]:
+        raise ValueError(reason)
+    return {
+        "policy": "legacy_native_chat_input_bound_tokenizer_v1",
+        "basis": "Identical verified checkpoint assets and model parameters.",
+        "source_sha256": {"fair_uk/evaluation_assets.py": source_hash},
+        "checkpoint_assets_sha256": hashlib.sha256(
+            json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "input_bound_tokenizer_sha256": {
+            language: asset["tokenizer_sha256"]
+            for language, asset in zip(("uk", "en"), assets, strict=True)
+        },
+        "input_bound_template_sha256": {
+            language: asset["native_template_sha256"]
+            for language, asset in zip(("uk", "en"), assets, strict=True)
+        },
+    }
 
 
 def _verify_severity_taxonomy(release, manifest, severity, binding):
