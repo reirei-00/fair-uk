@@ -22,7 +22,6 @@ from lm_eval.fair_uk.warbias.files import (
     write_json,
     write_rows,
 )
-from lm_eval.fair_uk.warbias.neutral import VERSION as NEUTRAL_VERSION
 from lm_eval.fair_uk.warbias.rows import (
     FIELDS,
     NEUTRAL_TRACK,
@@ -35,6 +34,9 @@ from lm_eval.fair_uk.warbias.rows import (
     task_name,
 )
 from lm_eval.fair_uk.warbias.schema import LANGUAGES
+
+
+NEUTRAL_VERSION = "warbias_neutral_variants_v1"
 
 
 METADATA_FIELDS = (

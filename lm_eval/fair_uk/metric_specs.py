@@ -462,6 +462,111 @@ _FAMILIES["warbias_benign"] = {
 }
 
 
+_FAMILIES["winopron_uk"] = {
+    "benchmark": "WinoPron-UK",
+    "protocol_note": "Published forced-choice generation with both released answer orders. The versioned parser accepts one unambiguous standalone Latin A/B token and maps it to occupation/participant. Row accuracy requires both orders to select the same role; inconsistent/invalid responses are incorrect. No stereotype bias score is inferred. Native scores are percentages; additional group outcomes are rates and resample whole source pairs.",
+    "metrics": [
+        _metric(
+            "prompt_accuracy",
+            "Fraction of released prompts selecting the gold answer letter.",
+            "All released forced-choice prompts, including invalid responses.",
+            "higher",
+        ),
+        _metric(
+            "prompt_attempt_rate",
+            "Fraction of prompts containing one unambiguous standalone Latin A/B answer token.",
+            "All released forced-choice prompts.",
+            "higher",
+            origin="diagnostic",
+        ),
+        _metric(
+            "option_order_consistency",
+            "Fraction of source rows whose two option orders select the same valid semantic role.",
+            "Rows with both released option orders; invalid or inconsistent orders count as zero.",
+            "higher",
+            origin="diagnostic",
+        ),
+        *[
+            _metric(
+                f"{context}_{outcome}",
+                definition,
+                f"Source rows in the {context} context, collapsed across both option orders.",
+                "higher",
+            )
+            for context in ("double", "single")
+            for outcome, definition in (
+                (
+                    "accuracy",
+                    "Fraction of source rows consistently selecting their gold semantic role.",
+                ),
+                (
+                    "attempt_rate",
+                    "Fraction of source rows consistently selecting one valid semantic role.",
+                ),
+            )
+        ],
+        _metric(
+            "accuracy",
+            "Fraction of source rows consistently selecting their gold semantic role, separately by context/pronoun set/type.",
+            "Source rows in the labeled scope, collapsed across both option orders.",
+            "higher",
+        ),
+        _metric(
+            "attempt_rate",
+            "Fraction of source rows consistently selecting a valid semantic role.",
+            "Source rows in the labeled scope, collapsed across both option orders.",
+            "higher",
+            origin="diagnostic",
+        ),
+        _metric(
+            "pair_consistency",
+            "Fraction of double-context complementary occupation/participant pairs with both source rows correct.",
+            "Complete pair_id/pronoun_set pairs in the labeled scope.",
+            "higher",
+        ),
+        _metric(
+            "female_minus_male_accuracy",
+            "Double-context female accuracy minus male accuracy.",
+            "Separate role-consistent female and male source-row denominators; null if either is absent.",
+            "signed",
+            "percentage_points",
+            notes="Accuracy difference, not a directional stereotype bias score.",
+        ),
+        _metric(
+            "gender_form_consistency",
+            "Fraction of double-context pair_id/gold-role units correct in both male and female forms.",
+            "Complete male/female units; null with incomplete gender-form coverage.",
+            "higher",
+        ),
+        _metric(
+            "full_gender_pair_consistency",
+            "Fraction of double-context pair_ids correct on both gold roles in both male and female forms.",
+            "Complete four-row gender/reference-role units; null if incomplete.",
+            "higher",
+        ),
+        *[
+            _metric(
+                name,
+                definition,
+                "The labeled native scope.",
+                "diagnostic",
+                "count",
+                origin="diagnostic",
+            )
+            for name, definition in (
+                ("n_prompts", "Number of released option-order prompts."),
+                ("n_rows", "Number of source rows after option-order collapse."),
+                (
+                    "independent_pairs",
+                    "Number of distinct complementary source pair IDs.",
+                ),
+            )
+        ],
+    ],
+    "group_outcomes": ["accuracy", "invalid", "position_consistent"],
+}
+
+
 def metric_catalog(task=None):
     """Return a JSON-serializable copy for one task, or the full family catalog."""
     if task is None:

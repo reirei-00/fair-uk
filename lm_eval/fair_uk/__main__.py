@@ -336,7 +336,7 @@ def main(argv=None):
                 "temperature": 0.0,
                 "do_sample": False,
             }
-            if family(args.task) in ("warbias", "warbias_benign")
+            if family(args.task) in ("warbias", "warbias_benign", "winopron_uk")
             else None,
             batch_size=str(args.batch_size),
             model_identity=model_identity(args.model_args),

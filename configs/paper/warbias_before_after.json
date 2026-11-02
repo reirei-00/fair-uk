@@ -1,0 +1,24 @@
+{
+  "protocol": "warbias_pmi_intervention_v1",
+  "full_bundle": "../../data/paper/warbias-evaluation-v3/manifest.json",
+  "training_language": null,
+  "target_axis": null,
+  "target_group": null,
+  "before_runs": null,
+  "after_runs": null,
+  "before_neutral_runs": null,
+  "after_neutral_runs": null,
+  "tau": null,
+  "minimum_target_reduction": null,
+  "minimum_independent_support": 5,
+  "bootstrap": 1000,
+  "seed": 42,
+  "qualification": {
+    "real_post_intervention_outputs": "not_collected",
+    "human_annotation_validation": "pending",
+    "neutrality_calibration": "pending",
+    "method_selection": "pending"
+  },
+  "margin_unit": "nats_summed_prior_normalised",
+  "interpretation": "Explicit primary-PMI adapter; legacy native per-token NNR is a separate protocol. Missing study choices are required, never inferred."
+}
