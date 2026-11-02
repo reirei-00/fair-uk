@@ -208,6 +208,8 @@ def verify_baseline_run(
         raise ValueError("Run checkpoint files differ from pinned weights or assets")
     if identity.get("parameters") != parameters:
         raise ValueError("Run model parameters differ")
+    if identity.get("adapter") != expected_identity.get("adapter"):
+        raise ValueError("Run adapter files differ from pinned assets")
     expected_code = (
         code_identity() if inference_code_identity is None else inference_code_identity
     )

@@ -27,7 +27,7 @@ fair-uk-eval suite --execute \
   --batch-size 8 --output results/my-model
 ```
 
-A self-contained local checkpoint can use `pretrained=/absolute/path/to/model,device=cuda`; its files are hashed. `device=cpu` is also supported. Separate tokenizer overrides, adapters, delta weights and GGUF artifacts are rejected until their provenance is supported. Checkpoint prompts use the raw protocol without silently applying chat templates. The equivalent CLI is `python -m lm_eval.fair_uk`.
+A self-contained local checkpoint can use `pretrained=/absolute/path/to/model,device=cuda`; its files are hashed. `device=cpu` is also supported. For vLLM, add `lora_local_path=/absolute/path/to/adapter` to load a LoRA adapter separately. The adapter must contain `adapter_config.json` and `adapter_model.safetensors`; both the base and adapter files are fingerprinted. Paired evaluation permits the adapter path to change while preserving inference settings and effective inputs. Separate tokenizer overrides, PEFT backend overrides, delta weights and GGUF artifacts remain unsupported. Checkpoint prompts use the raw protocol without silently applying chat templates. The equivalent CLI is `python -m lm_eval.fair_uk`.
 
 | Selection | Arguments |
 | --- | --- |
