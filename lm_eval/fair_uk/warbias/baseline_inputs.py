@@ -330,6 +330,10 @@ def release_overview(release):
     """Validate frozen inputs and describe all model/task cells without inference."""
     from lm_eval.fair_uk.data import family
 
+    if read(Path(release) / "inputs/manifest.json").get("neutral_controls") is not None:
+        from lm_eval.fair_uk.warbias.baseline_neutral import neutral_release_overview
+
+        return neutral_release_overview(release)
     release, manifest, profiles, rows, severity, binding = _release_inputs(release)
     cells = [
         {

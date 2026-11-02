@@ -55,6 +55,8 @@ def _analyse_model(
     seed,
     inference_source,
     metadata=None,
+    neutral=None,
+    neutral_results=None,
 ):
     from lm_eval.fair_uk.data import family
 
@@ -217,6 +219,24 @@ def _analyse_model(
                     ),
                 }
             )
+    if neutral is not None:
+        from lm_eval.fair_uk.warbias.baseline_neutral import (
+            add_neutral_results,
+            analyze_neutral_model,
+        )
+
+        try:
+            status, languages = analyze_neutral_model(
+                neutral, neutral_results, model, indexed, severity, draws, seed
+            )
+            report["primary_prior_normalised_ss"] = status
+            if languages is not None:
+                add_neutral_results(report, languages, draws, seed)
+        except (ValueError, KeyError, FileNotFoundError) as error:
+            report["primary_prior_normalised_ss"] = {
+                "status": "validation_failed",
+                "reason": str(error),
+            }
     return report
 
 
@@ -229,6 +249,8 @@ def analyze_baselines(
     *,
     inference_release=None,
     metadata_release=None,
+    neutral_release=None,
+    neutral_results=None,
 ):
     """Analyze complete saved baselines with native scoring and severity slices.
 
@@ -241,11 +263,15 @@ def analyze_baselines(
     snapshot whose inference and native scoring code match this library.
     ``metadata_release`` applies declared case/profile corrections after the
     original native runs pass verification; prompts and predictions stay fixed.
+    ``neutral_release`` and ``neutral_results`` add source-bound control
+    likelihoods after the original runs pass verification.
     """
     if type(bootstrap) is not int or bootstrap < 0 or type(seed) is not int:
         raise ValueError(
             "Use a nonnegative integer bootstrap count and an integer seed"
         )
+    if (neutral_release is None) != (neutral_results is None):
+        raise ValueError("Provide both the neutral release and its results")
     original = _release_inputs(release)
     release, manifest, profiles, _rows, severity, binding = original
     from lm_eval.fair_uk.provenance import code_identity
@@ -269,6 +295,13 @@ def analyze_baselines(
         metadata = validate_metadata_release(original, corrected)
         active_release, active_manifest = corrected[:2]
         severity, binding = metadata["severity"], metadata["binding"]
+    neutral = None
+    if neutral_release is not None:
+        from lm_eval.fair_uk.warbias.baseline_neutral import neutral_release_inputs
+
+        neutral = neutral_release_inputs(
+            neutral_release, corrected if metadata is not None else original
+        )
     results = Path(results).resolve()
     models = list(profiles) if models is None else list(models)
     if (
@@ -321,6 +354,8 @@ def analyze_baselines(
             "models_sha256": sha(release / "models.json"),
             "source": manifest.get("source"),
         }
+    if neutral is not None:
+        report["neutral_release"] = neutral["provenance"]
     for model in models:
         try:
             report["models"][model] = _analyse_model(
@@ -333,10 +368,29 @@ def analyze_baselines(
                 seed,
                 inference_source,
                 metadata,
+                neutral,
+                neutral_results,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {
                 "status": "validation_failed",
                 "reason": str(error),
             }
+    if neutral is not None:
+        statuses = {
+            model: result.get("primary_prior_normalised_ss", result)["status"]
+            for model, result in report["models"].items()
+        }
+        available = all(value == "available" for value in statuses.values())
+        failed = any(value == "validation_failed" for value in statuses.values())
+        report["primary_prior_normalised_ss"] = {
+            "status": "available"
+            if available
+            else "validation_failed"
+            if failed
+            else "pending_collection",
+            "reason": "Complete source-bound control likelihoods verified for every selected model."
+            if available
+            else "See each model's neutral-control coverage and validation status.",
+        }
     return report

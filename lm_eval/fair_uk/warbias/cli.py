@@ -122,6 +122,12 @@ def _parser():
         type=Path,
         help="Prepared release with declared metadata corrections and unchanged inputs",
     )
+    baseline.add_argument(
+        "--neutral-release", type=Path, help="Source-bound neutral-control supplement"
+    )
+    baseline.add_argument(
+        "--neutral-results", type=Path, help="Saved neutral-control model runs"
+    )
 
     return parser
 
@@ -175,6 +181,8 @@ def main(argv=None):
             frozen.append(args.inference_release)
         if args.metadata_release is not None:
             frozen.append(args.metadata_release)
+        if args.neutral_release is not None:
+            frozen.append(args.neutral_release)
         if any(args.output.resolve().is_relative_to(path.resolve()) for path in frozen):
             raise ValueError("Analysis outputs must stay outside the frozen release")
         report = analyze_baselines(
@@ -185,10 +193,14 @@ def main(argv=None):
             seed=args.seed,
             inference_release=args.inference_release,
             metadata_release=args.metadata_release,
+            neutral_release=args.neutral_release,
+            neutral_results=args.neutral_results,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(
             value["status"] == "validation_failed"
+            or value.get("primary_prior_normalised_ss", {}).get("status")
+            == "validation_failed"
             for value in report["models"].values()
         ):
             raise ValueError("Saved baseline validation failed; see summary.json")
