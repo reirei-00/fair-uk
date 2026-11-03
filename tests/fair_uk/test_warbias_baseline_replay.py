@@ -49,15 +49,26 @@ def test_snapshot_allows_analysis_only_changes_and_preserves_both_identities(tmp
     assert evidence["evaluator_commit"] == "a" * 40
 
 
-def test_snapshot_rejects_changed_backend_and_unbound_source(tmp_path):
+@pytest.mark.parametrize(
+    "name", ["runner.py", "__main__.py", "runs.py", "warbias/selection.py"]
+)
+def test_snapshot_rejects_changed_backend_and_unbound_source(tmp_path, name):
     snapshot = _snapshot(tmp_path / "collector")
-    path = snapshot / "evaluator/lm_eval/fair_uk/runner.py"
+    path = snapshot / "evaluator/lm_eval/fair_uk" / name
     path.write_text(path.read_text() + "\n")
     with pytest.raises(ValueError, match="checksums"):
         validate_inference_release(snapshot)
     _bind(snapshot)
     with pytest.raises(ValueError, match="inference or native scorer"):
         validate_inference_release(snapshot)
+
+
+def test_selection_module_addition_is_bound_to_its_reviewed_hash(tmp_path):
+    snapshot = _snapshot(tmp_path / "collector")
+    path = snapshot / "evaluator/lm_eval/fair_uk/warbias/selection.py"
+    path.unlink()
+    _bind(snapshot)
+    assert validate_inference_release(snapshot)["code_identity"] != code_identity()
 
 
 @pytest.mark.parametrize("languages", [None, ["uk"], ["en"]])

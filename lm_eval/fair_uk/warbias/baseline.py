@@ -36,6 +36,12 @@ from lm_eval.fair_uk.warbias.baseline_summary import (
     triplet_items,
     verify_qa_formula,
 )
+from lm_eval.fair_uk.warbias.selection import (
+    actor_names,
+    collection_actors,
+    select_actors,
+    select_verified_actors,
+)
 
 
 __all__ = [
@@ -57,7 +63,7 @@ def _select(items, triplet_ids):
     )
 
 
-def _cohort(rows, triplet_ids):
+def _cohort(rows, triplet_ids, actors=None):
     if triplet_ids is None:
         return None
     from lm_eval.fair_uk.data import family
@@ -73,6 +79,7 @@ def _cohort(rows, triplet_ids):
     for task, items in rows.items():
         if family(task) != "warbias_triplets":
             continue
+        items = select_actors(items, actors)
         if not selected <= {row["id"] for row in items}:
             raise ValueError("Selected triplet IDs are absent from a language panel")
         membership = {}
@@ -99,6 +106,7 @@ def _analyse_model(
     triplet_ids=None,
     neutral_inference_source=None,
     selected_languages=("uk", "en"),
+    selected_actors=None,
 ):
     from lm_eval.fair_uk.data import family
 
@@ -140,6 +148,7 @@ def _analyse_model(
     ):
         raise ValueError("Collection binding differs from the selected release")
     verify_collection_tasks(binding, tasks, all_tasks)
+    collected_actors = collection_actors(binding, selected_actors)
     runs = {
         task: verify_baseline_run(
             root / "full" / task,
@@ -149,10 +158,14 @@ def _analyse_model(
             profiles[model]["model_identity"],
             smoke=False,
             inference_code_identity=inference_source["code_identity"],
+            actors=collected_actors,
         )
         for task in tasks
     }
-    if any(len(run.selected_rows) != len(run.source_rows) for run in runs.values()):
+    if any(
+        run.selected_rows != select_actors(run.source_rows, collected_actors)
+        for run in runs.values()
+    ):
         raise ValueError("A full-panel analysis received a source subset")
     provenance = {
         task: {
@@ -187,6 +200,10 @@ def _analyse_model(
             )
             for task, run in runs.items()
         }
+    indexed = {
+        key: select_verified_actors(run, selected_actors)
+        for key, run in indexed.items()
+    }
     report = {
         "status": "complete",
         "runs": provenance,
@@ -307,6 +324,7 @@ def _analyse_model(
                 seed,
                 inference_source=neutral_inference_source,
                 selected_languages=selected_languages,
+                selected_actors=selected_actors,
             )
             report["primary_prior_normalised_ss"] = status
             if languages is not None:
@@ -338,6 +356,7 @@ def analyze_checkpoints(
     triplet_ids=None,
     neutral_inference_release=None,
     languages=None,
+    actors=None,
 ):
     """Analyze complete saved checkpoints with baseline metrics and severity slices.
 
@@ -355,6 +374,9 @@ def analyze_checkpoints(
     ``languages`` selects UK, EN or both (default). Only selected-language runs
     are required; complete frozen input bundles remain verified. Language
     contrasts are calculated only when both languages are selected.
+    ``actors`` selects complete IDP or veteran panels, including QA. A source
+    component can span actors; triplet cohorts keep complete components within
+    the selected actor domain. Full saved runs may be projected after validation.
     """
     if type(bootstrap) is not int or bootstrap < 0 or type(seed) is not int:
         raise ValueError(
@@ -372,6 +394,7 @@ def analyze_checkpoints(
     selected_languages = tuple(
         language for language in ("uk", "en") if language in selected_languages
     )
+    selected_actors = actor_names(actors)
     from lm_eval.fair_uk.warbias.baseline_answers import policy_definition
 
     qa_parsing = policy_definition(qa_answer_policy)
@@ -415,7 +438,9 @@ def analyze_checkpoints(
             neutral_release, corrected if metadata is not None else original
         )
     triplet_ids = _cohort(
-        corrected[3] if metadata is not None else original[3], triplet_ids
+        corrected[3] if metadata is not None else original[3],
+        triplet_ids,
+        selected_actors,
     )
     results = Path(results).resolve()
     models = list(profiles) if models is None else list(models)
@@ -442,6 +467,7 @@ def analyze_checkpoints(
         "weighting": "Equal original claim components after within-component averaging; keep profile and language variants together.",
         "bootstrap": {"draws": bootstrap, "seed": seed, "level": 0.95},
         "languages": list(selected_languages),
+        "actors": selected_actors or ["idp", "veteran"],
         "definitions": metric_definitions(),
         "analysis_code_identity": code_identity(),
         "inference_source": inference_source,
@@ -474,8 +500,8 @@ def analyze_checkpoints(
             "sha256": hashlib.sha256(
                 json.dumps(ids, separators=(",", ":")).encode()
             ).hexdigest(),
-            "selection": "Complete semantic components, applied after full native run verification.",
-            "qa_selection": "All QA rows remain included.",
+            "selection": "Complete semantic components within selected actors, applied after native run verification.",
+            "qa_selection": "All QA rows for the selected actors remain included.",
         }
     if metadata is not None:
         report["metadata_release"] = metadata["provenance"]
@@ -506,6 +532,7 @@ def analyze_checkpoints(
                 triplet_ids,
                 neutral_inference_source,
                 selected_languages,
+                selected_actors,
             )
         except (ValueError, KeyError, FileNotFoundError) as error:
             report["models"][model] = {

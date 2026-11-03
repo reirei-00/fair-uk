@@ -193,6 +193,7 @@ def verify_baseline_run(
     smoke=False,
     collection_settings=None,
     inference_code_identity=None,
+    actors=None,
 ):
     """Verify complete native outputs against their frozen source and checkpoint.
 
@@ -204,12 +205,15 @@ def verify_baseline_run(
     from lm_eval.fair_uk.provenance import code_identity
     from lm_eval.fair_uk.runs import load_verified_run
     from lm_eval.fair_uk.suite import verify_result
+    from lm_eval.fair_uk.warbias.selection import actor_names, select_actors
 
     settings = SCORING_SETTINGS if collection_settings is None else collection_settings
     if set(settings) != set(SCORING_SETTINGS):
         raise ValueError("Declare all collection settings")
     directory, bundle = Path(directory), Path(bundle)
     run, report = read(directory / "run.json"), read(directory / "report.json")
+    if actor_names(run.get("actors")) != actor_names(actors):
+        raise ValueError("Run actor selection differs from its collection binding")
     identity = run.get("model_identity") or {}
     hashes = expected_identity.get("local_files_sha256")
     if (
@@ -260,7 +264,9 @@ def verify_baseline_run(
         }.items()
     ):
         raise ValueError("Native report bootstrap settings differ")
-    selected = select_clusters(load(task, dataset_bundle=bundle), limit)
+    selected = select_clusters(
+        select_actors(load(task, dataset_bundle=bundle), actors), limit
+    )
     verify_result(
         directory,
         task,

@@ -112,6 +112,7 @@ def _parser():
     baseline.add_argument(
         "--language", choices=LANGUAGES, action="append", help="Default: both languages"
     )
+    baseline.add_argument("--actor", choices=("idp", "veteran"), action="append")
     baseline.add_argument("--bootstrap", type=int, default=1000)
     baseline.add_argument("--seed", type=int, default=42)
     baseline.add_argument(
@@ -219,6 +220,7 @@ def main(argv=None):
             triplet_ids=_ids(args.triplet_ids) if args.triplet_ids else None,
             neutral_inference_release=args.neutral_inference_release,
             languages=args.language,
+            actors=args.actor,
         )
         result = "\n".join(map(str, write_baseline_results(report, args.output)))
         if any(

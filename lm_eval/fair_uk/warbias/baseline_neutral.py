@@ -25,6 +25,11 @@ from lm_eval.fair_uk.warbias.baseline_summary import (
 from lm_eval.fair_uk.warbias.panel import inference_identity
 from lm_eval.fair_uk.warbias.rows import FIELDS, adapt_annotated, task_name
 from lm_eval.fair_uk.warbias.scoring import prior_normalised_items
+from lm_eval.fair_uk.warbias.selection import (
+    collection_actors,
+    select_actors,
+    select_verified_actors,
+)
 
 
 def _digest(value):
@@ -277,6 +282,7 @@ def analyze_neutral_model(
     *,
     inference_source=None,
     selected_languages=("uk", "en"),
+    selected_actors=None,
 ):
     """Verify and score one model's complete neutral supplement."""
     from lm_eval.fair_uk.warbias.baseline_replay import validate_inference_release
@@ -314,6 +320,7 @@ def analyze_neutral_model(
     ):
         raise ValueError("Neutral collection lacks a matching repeated qualification")
     verify_collection_tasks(binding, tasks, all_tasks)
+    collected_actors = collection_actors(binding, selected_actors)
     source = inference_source or (
         validate_inference_release(release)
         if (release / "checksums.json").exists()
@@ -329,16 +336,21 @@ def analyze_neutral_model(
             parameters,
             profile["model_identity"],
             inference_code_identity=source["code_identity"],
+            actors=collected_actors,
         )
         for language in selected_languages
     }
     for language, run in runs.items():
-        if len(run.selected_rows) != len(run.source_rows):
+        if run.selected_rows != select_actors(run.source_rows, collected_actors):
             raise ValueError("Neutral collection is incomplete")
         if _inference(run) != _inference(original["warbias_triplets", language]):
             raise ValueError(
                 "Original and neutral likelihood inference settings differ"
             )
+    runs = {
+        language: select_verified_actors(run, selected_actors)
+        for language, run in runs.items()
+    }
     languages = {}
     for language, run in runs.items():
         base = original["warbias_triplets", language]
