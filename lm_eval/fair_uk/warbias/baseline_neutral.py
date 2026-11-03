@@ -11,6 +11,7 @@ from lm_eval.fair_uk.warbias.baseline_inputs import (
     read,
     sha,
     verify_baseline_run,
+    verify_collection_tasks,
 )
 from lm_eval.fair_uk.warbias.baseline_metadata import _check_models
 from lm_eval.fair_uk.warbias.baseline_summary import (
@@ -266,7 +267,16 @@ def _inference(run):
 
 
 def analyze_neutral_model(
-    neutral, results, model, original, severity, draws, seed, *, inference_source=None
+    neutral,
+    results,
+    model,
+    original,
+    severity,
+    draws,
+    seed,
+    *,
+    inference_source=None,
+    selected_languages=("uk", "en"),
 ):
     """Verify and score one model's complete neutral supplement."""
     from lm_eval.fair_uk.warbias.baseline_replay import validate_inference_release
@@ -274,7 +284,12 @@ def analyze_neutral_model(
     release = neutral["release"]
     bundle = release / "inputs/manifest.json"
     root = Path(results).resolve() / model
-    tasks = neutral["manifest"]["datasets"]
+    all_tasks = neutral["manifest"]["datasets"]
+    tasks = {
+        task: spec
+        for task, spec in all_tasks.items()
+        if spec["language"] in selected_languages
+    }
     missing = [
         task
         for task in tasks
@@ -298,6 +313,7 @@ def analyze_neutral_model(
         or binding.get("settings") != SCORING_SETTINGS
     ):
         raise ValueError("Neutral collection lacks a matching repeated qualification")
+    verify_collection_tasks(binding, tasks, all_tasks)
     source = inference_source or (
         validate_inference_release(release)
         if (release / "checksums.json").exists()
@@ -314,7 +330,7 @@ def analyze_neutral_model(
             profile["model_identity"],
             inference_code_identity=source["code_identity"],
         )
-        for language in ("uk", "en")
+        for language in selected_languages
     }
     for language, run in runs.items():
         if len(run.selected_rows) != len(run.source_rows):
@@ -383,6 +399,8 @@ def add_neutral_results(report, languages, draws, seed):
             "Prior-normalised association diagnostics. Actor rows compare different claims; profile contrasts do not control every added attribute or reporter. LMS remains a raw summed-likelihood diagnostic."
         )
     report["group_diagnostics"][scoring] = diagnostics
+    if set(languages) != {"uk", "en"}:
+        return
     for scope, left in scope_selections(languages["uk"]):
         ids = {item["id"] for item in left}
         right = [item for item in languages["en"] if item["id"] in ids]

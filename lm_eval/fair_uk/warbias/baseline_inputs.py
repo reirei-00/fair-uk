@@ -33,6 +33,18 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def verify_collection_tasks(binding, selected, available):
+    """Require selected tasks to belong to the qualified collection scope."""
+    tasks = binding.get("tasks", list(available))
+    if (
+        not isinstance(tasks, list)
+        or any(not isinstance(task, str) for task in tasks)
+        or len(set(tasks)) != len(tasks)
+        or not set(selected) <= set(tasks) <= set(available)
+    ):
+        raise ValueError("Selected tasks differ from the qualified collection scope")
+
+
 def verify_language_inference(left, right, expected_identity, parameters, source):
     """Compare language runs without treating rendered prompts as tokenizers.
 

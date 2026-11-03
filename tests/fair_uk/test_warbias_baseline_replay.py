@@ -60,7 +60,10 @@ def test_snapshot_rejects_changed_backend_and_unbound_source(tmp_path):
         validate_inference_release(snapshot)
 
 
-def test_saved_runs_require_explicit_frozen_compatible_collector(release, tmp_path):
+@pytest.mark.parametrize("languages", [None, ["uk"], ["en"]])
+def test_saved_runs_require_explicit_frozen_compatible_collector(
+    release, tmp_path, languages
+):
     results = tmp_path / "results"
     _saved_runs(release, results)
     snapshot = _snapshot(tmp_path / "collector")
@@ -79,7 +82,7 @@ def test_saved_runs_require_explicit_frozen_compatible_collector(release, tmp_pa
     strict = analyze_baselines(release, results, bootstrap=0)
     assert strict["models"]["fixture"]["status"] == "validation_failed"
     report = analyze_baselines(
-        release, results, bootstrap=0, inference_release=snapshot
+        release, results, bootstrap=0, inference_release=snapshot, languages=languages
     )
     assert report["models"]["fixture"]["status"] == "complete"
     assert report["inference_source"]["code_identity"] == identity
