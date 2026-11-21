@@ -7,6 +7,8 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from lm_eval.fair_uk import matched_release
+
 
 REGISTRY = json.loads(Path(__file__).with_name("datasets.json").read_text())
 PROTOCOLS = {
@@ -49,6 +51,8 @@ def _bundle_path(root, filename):
 def bundle_registry(path):
     """Read an explicit local bundle without mutating the public release registry."""
     path = Path(path)
+    if path == Path(matched_release.NAME):
+        path = matched_release.REGISTRATION
     manifest = json.loads(path.read_text())
     if manifest.get("schema_version") != 1 or not manifest.get("datasets"):
         raise ValueError("Unsupported or empty dataset bundle")
@@ -91,6 +95,12 @@ def load(task, path=None, dataset_bundle=None, *, bundle=None):
         if dataset_bundle is not None:
             raise ValueError("Specify only one dataset bundle argument")
         dataset_bundle = bundle
+    if dataset_bundle is not None and Path(dataset_bundle) == Path(
+        matched_release.NAME
+    ):
+        dataset_bundle = matched_release.verify_manifest(
+            matched_release.installed_manifest()
+        )
     spec = dataset_spec(task, dataset_bundle)
     prepared = spec.get("format") == "adapted_jsonl_v1"
     if path is None:
