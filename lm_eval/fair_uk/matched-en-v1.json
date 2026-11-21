@@ -1,0 +1,399 @@
+{
+  "schema_version": 1,
+  "preparation_version": "source_matched_bilingual_v1",
+  "preparation_code_sha256": "1a233559a09568bba3b39085c8c0676f8169be8fde30b2c03b158a0aa60eddaf",
+  "human_validated": false,
+  "sources": [
+    {
+      "path": "outputs/fair_uk_preparation_20260922/bbq_uk/data/test.csv",
+      "sha256": "de97272d7b1368d8fc9d347d71a004a0781d9336d8670ede5c6ed0d80e819c0f",
+      "role": "bbq_uk"
+    },
+    {
+      "path": "fair_forget_tranlsation/hf_dataset/stereoset-uk-eval/data/validation.csv",
+      "sha256": "0fd16c79b88dd4d1384466b27b46e0b305aadf1a6086798da22c0e7c2f17d202",
+      "role": "stereoset_uk"
+    },
+    {
+      "path": "fair_forget_tranlsation/hf_dataset/winobias-uk-natural/data/validation.csv",
+      "sha256": "2e2a638adbecd9f3cf84e961b6c2e4720fa941d13637fda06e328e65f2deab27",
+      "role": "winobias_uk_natural"
+    },
+    {
+      "path": "fair_forget_tranlsation/hf_dataset/winobias-uk-controlled/data/test.csv",
+      "sha256": "1f4eed3b2e0984eaf2615640bdba910f2a241c5556de86439bddfadf3794cf45",
+      "role": "winobias_uk_controlled"
+    },
+    {
+      "path": "data/bbq/data/Age.jsonl",
+      "sha256": "46e805b3fc2d8cbd26eeb8e8430d98cf7b2dc9c83574ff3674e8ce4f0fca2a60",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Disability_status.jsonl",
+      "sha256": "375d40d9b71f056150264445ec189b13934998f3f49a1e311aa7578eb3b45e5f",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Gender_identity.jsonl",
+      "sha256": "8b5adbb368510a97d5775dc43e1c719e0249fe2da33f13c83e3e29edafec7a00",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Nationality.jsonl",
+      "sha256": "a583e74666aec0341ded8aa3983e7cad694eb24de72c254d28b2df3035720090",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Physical_appearance.jsonl",
+      "sha256": "e48d7e13508565f4801574e611043470c25c95a0a62af3699cb5ee7cb02608fb",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Race_ethnicity.jsonl",
+      "sha256": "4a9f1214cfaa115ce7f0bdb40609122e431f5152c71b8ca64d665e483b946ae6",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Race_x_SES.jsonl",
+      "sha256": "af8e2ae3d0e5be9ebcbfe7149e591d47ff649e263307f4548f7fb12f6a6d83e8",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Race_x_gender.jsonl",
+      "sha256": "e5dbba782f8c4e25b99dd5470b5136e2db73dbf401cf6d4a5a3ed31b02f95696",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Religion.jsonl",
+      "sha256": "cb9555f9f3454a52cd2df85956b59bd7fcca5aa922c8527693b1164d08417616",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/SES.jsonl",
+      "sha256": "9f92754bb037b0982604b9112705fb81d60a19d9e759c67e4a85e484a070f528",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/bbq/data/Sexual_orientation.jsonl",
+      "sha256": "2c71036b9e7584fe589c42aef32c1a42bc01b9a5e9b1b8704342630cdb08cefd",
+      "role": "original_english_bbq"
+    },
+    {
+      "path": "data/stereoset/dev.json",
+      "sha256": "73a0f31b711688112602e4c3ac6ab1e1a7cadcdd67df6c6fd55501c889676c90",
+      "role": "original_english_stereoset"
+    },
+    {
+      "path": "fair_forget_tranlsation/outputs/winobias_uk_build/lapa_pair_translations_corrected.jsonl",
+      "sha256": "bd47fca2e84829bdebedecba2c0550f4c16ad6a69c8abe332cbefae67f0ef46d",
+      "role": "embedded_original_english_winobias"
+    },
+    {
+      "path": "fair_forget_tranlsation/outputs/winobias_uk_natural_full/natural_construction.jsonl",
+      "sha256": "62e2cf161314f5dcce7b04a8719aa0ea37f7b6fcb8e0c4e68c7a1042d4214d40",
+      "role": "natural_export_lineage"
+    },
+    {
+      "path": "fair_forget_tranlsation/outputs/winobias_uk_controlled_full/controlled.csv",
+      "sha256": "9995eadceee8097b4023b2777cea12f2e30cbc02177c8bf1a663dbe742e14d21",
+      "role": "controlled_export_lineage"
+    }
+  ],
+  "source_revisions": {
+    "bbq": "bea11bd97d79217245b5871acd247b9d6eb24598",
+    "stereoset": "ead7d086a64a192a1eca88e0dd2fd163de375218"
+  },
+  "datasets": {
+    "bbq_uk": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:6fb35ad0a327e935ccdc37e8576b94ec7406c44b7fc0eb682986184d7f0bdfff",
+      "filename": "data/bbq_uk.jsonl",
+      "sha256": "6fb35ad0a327e935ccdc37e8576b94ec7406c44b7fc0eb682986184d7f0bdfff",
+      "rows": 58492,
+      "language": "uk",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "abc_cyclic_mean_token_logprob_raw_v1",
+      "counterpart": "bbq_en",
+      "pairing": {
+        "uk_task": "bbq_uk",
+        "en_task": "bbq_en",
+        "matched_rows": 58492,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/bbq_uk.jsonl",
+        "sha256": "19f142f12df228794c55d9dade33f0dbb464d1a95ec597c8dd4a15a74bc51e05",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/BBQ-UK",
+        "revision": "4d19497de776cc5be55e9b3ad9481ed0836632b0",
+        "filename": "data/test.csv",
+        "sha256": "de97272d7b1368d8fc9d347d71a004a0781d9336d8670ede5c6ed0d80e819c0f",
+        "rows": 58492,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "bbq_en": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:cb3fa063dbad6833937b005899e894580969a3654573d7fe4d4ed265ca889fe6",
+      "filename": "data/bbq_en.jsonl",
+      "sha256": "cb3fa063dbad6833937b005899e894580969a3654573d7fe4d4ed265ca889fe6",
+      "rows": 58492,
+      "language": "en",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "abc_cyclic_mean_token_logprob_raw_v1",
+      "counterpart": "bbq_uk",
+      "pairing": {
+        "uk_task": "bbq_uk",
+        "en_task": "bbq_en",
+        "matched_rows": 58492,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/bbq_uk.jsonl",
+        "sha256": "19f142f12df228794c55d9dade33f0dbb464d1a95ec597c8dd4a15a74bc51e05",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/BBQ-UK",
+        "revision": "4d19497de776cc5be55e9b3ad9481ed0836632b0",
+        "filename": "data/test.csv",
+        "sha256": "de97272d7b1368d8fc9d347d71a004a0781d9336d8670ede5c6ed0d80e819c0f",
+        "rows": 58492,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "stereoset_uk": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:95a69bcc33ad7ecd4f6e5f8a464f4fcc0233da75fd063eb9dfe6dc1aa7792ac9",
+      "filename": "data/stereoset_uk.jsonl",
+      "sha256": "95a69bcc33ad7ecd4f6e5f8a464f4fcc0233da75fd063eb9dfe6dc1aa7792ac9",
+      "rows": 949,
+      "language": "uk",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "causal_full_sentence_mean_token_logprob_v1",
+      "counterpart": "stereoset_en",
+      "pairing": {
+        "uk_task": "stereoset_uk",
+        "en_task": "stereoset_en",
+        "matched_rows": 949,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/stereoset_uk.jsonl",
+        "sha256": "8105fdf3e1979fb67791e9a0918d6d531f1ea36257620b853beebd3a3d7a74f9",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/StereoSet-UK-Eval",
+        "revision": "b408fe0283a5159d5815e790197d4b5571fb6ca0",
+        "filename": "data/validation.csv",
+        "sha256": "0fd16c79b88dd4d1384466b27b46e0b305aadf1a6086798da22c0e7c2f17d202",
+        "rows": 949,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "stereoset_en": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:841768c98788fe437d5568316401aeed7186deb311b2ef2ccb80da8366be0525",
+      "filename": "data/stereoset_en.jsonl",
+      "sha256": "841768c98788fe437d5568316401aeed7186deb311b2ef2ccb80da8366be0525",
+      "rows": 949,
+      "language": "en",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "causal_full_sentence_mean_token_logprob_v1",
+      "counterpart": "stereoset_uk",
+      "pairing": {
+        "uk_task": "stereoset_uk",
+        "en_task": "stereoset_en",
+        "matched_rows": 949,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/stereoset_uk.jsonl",
+        "sha256": "8105fdf3e1979fb67791e9a0918d6d531f1ea36257620b853beebd3a3d7a74f9",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/StereoSet-UK-Eval",
+        "revision": "b408fe0283a5159d5815e790197d4b5571fb6ca0",
+        "filename": "data/validation.csv",
+        "sha256": "0fd16c79b88dd4d1384466b27b46e0b305aadf1a6086798da22c0e7c2f17d202",
+        "rows": 949,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "winobias_uk_natural": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:dcd289832d080477488d6d348b9b8853d15c00294dd127a9e5d6438b5078e6d3",
+      "filename": "data/winobias_uk_natural.jsonl",
+      "sha256": "dcd289832d080477488d6d348b9b8853d15c00294dd127a9e5d6438b5078e6d3",
+      "rows": 1674,
+      "language": "uk",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "counterbalanced_ab_mean_token_logprob_v1",
+      "counterpart": "winobias_en_natural",
+      "pairing": {
+        "uk_task": "winobias_uk_natural",
+        "en_task": "winobias_en_natural",
+        "matched_rows": 558,
+        "excluded_uk_rows": 1116,
+        "filename": "pairs/winobias_uk_natural.jsonl",
+        "sha256": "fa2c91dc41ad304f44d0994c9987c8a41642eb8626ebead69b1d757b90d6ef34",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/WinoBias-UK-Natural",
+        "revision": "1d17b7dbc99ecfa14a1cc99cd9f3aab9e1824786",
+        "filename": "data/validation.csv",
+        "sha256": "2e2a638adbecd9f3cf84e961b6c2e4720fa941d13637fda06e328e65f2deab27",
+        "rows": 1674,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "winobias_en_natural": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:20a5527bb0b741d75b36f14ec3d02f940db647bf6cc5ce423d40ce7d25a110d7",
+      "filename": "data/winobias_en_natural.jsonl",
+      "sha256": "20a5527bb0b741d75b36f14ec3d02f940db647bf6cc5ce423d40ce7d25a110d7",
+      "rows": 558,
+      "language": "en",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "counterbalanced_ab_mean_token_logprob_v1",
+      "counterpart": "winobias_uk_natural",
+      "pairing": {
+        "uk_task": "winobias_uk_natural",
+        "en_task": "winobias_en_natural",
+        "matched_rows": 558,
+        "excluded_uk_rows": 1116,
+        "filename": "pairs/winobias_uk_natural.jsonl",
+        "sha256": "fa2c91dc41ad304f44d0994c9987c8a41642eb8626ebead69b1d757b90d6ef34",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/WinoBias-UK-Natural",
+        "revision": "1d17b7dbc99ecfa14a1cc99cd9f3aab9e1824786",
+        "filename": "data/validation.csv",
+        "sha256": "2e2a638adbecd9f3cf84e961b6c2e4720fa941d13637fda06e328e65f2deab27",
+        "rows": 1674,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "winobias_uk_controlled": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:4f3b5f2b2dec62caa122c012f02dd8b1adcbb2aa6acc57a1d7858efb0f6e189d",
+      "filename": "data/winobias_uk_controlled.jsonl",
+      "sha256": "4f3b5f2b2dec62caa122c012f02dd8b1adcbb2aa6acc57a1d7858efb0f6e189d",
+      "rows": 1580,
+      "language": "uk",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "fixed_ab_mean_token_logprob_v1",
+      "counterpart": "winobias_en_controlled",
+      "pairing": {
+        "uk_task": "winobias_uk_controlled",
+        "en_task": "winobias_en_controlled",
+        "matched_rows": 1580,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/winobias_uk_controlled.jsonl",
+        "sha256": "db5d8cbb42b39d0ffc9f294c0e9e186c7e52b5d620e7edc7bece11c81ad7b370",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/WinoBias-UK-Controlled",
+        "revision": "7ca9f2338bdbc5cb2d197389bf00b2560d086db1",
+        "filename": "data/test.csv",
+        "sha256": "1f4eed3b2e0984eaf2615640bdba910f2a241c5556de86439bddfadf3794cf45",
+        "rows": 1580,
+        "language": "uk",
+        "human_validated": false
+      }
+    },
+    "winobias_en_controlled": {
+      "repo": "local-bundle",
+      "revision": "local-sha256:9c4c18e7363232ae1228a32bd4fff27ffad665e891a679d7f80639eeeafa41b9",
+      "filename": "data/winobias_en_controlled.jsonl",
+      "sha256": "9c4c18e7363232ae1228a32bd4fff27ffad665e891a679d7f80639eeeafa41b9",
+      "rows": 1580,
+      "language": "en",
+      "human_validated": false,
+      "format": "adapted_jsonl_v1",
+      "protocol": "fixed_ab_mean_token_logprob_v1",
+      "counterpart": "winobias_uk_controlled",
+      "pairing": {
+        "uk_task": "winobias_uk_controlled",
+        "en_task": "winobias_en_controlled",
+        "matched_rows": 1580,
+        "excluded_uk_rows": 0,
+        "filename": "pairs/winobias_uk_controlled.jsonl",
+        "sha256": "db5d8cbb42b39d0ffc9f294c0e9e186c7e52b5d620e7edc7bece11c81ad7b370",
+        "alignment": "source_identity_and_scoring_metadata",
+        "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+      },
+      "original_registry": {
+        "repo": "FairForget/WinoBias-UK-Controlled",
+        "revision": "7ca9f2338bdbc5cb2d197389bf00b2560d086db1",
+        "filename": "data/test.csv",
+        "sha256": "1f4eed3b2e0984eaf2615640bdba910f2a241c5556de86439bddfadf3794cf45",
+        "rows": 1580,
+        "language": "uk",
+        "human_validated": false
+      }
+    }
+  },
+  "pairs": [
+    {
+      "uk_task": "bbq_uk",
+      "en_task": "bbq_en",
+      "matched_rows": 58492,
+      "excluded_uk_rows": 0,
+      "filename": "pairs/bbq_uk.jsonl",
+      "sha256": "19f142f12df228794c55d9dade33f0dbb464d1a95ec597c8dd4a15a74bc51e05",
+      "alignment": "source_identity_and_scoring_metadata",
+      "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+    },
+    {
+      "uk_task": "stereoset_uk",
+      "en_task": "stereoset_en",
+      "matched_rows": 949,
+      "excluded_uk_rows": 0,
+      "filename": "pairs/stereoset_uk.jsonl",
+      "sha256": "8105fdf3e1979fb67791e9a0918d6d531f1ea36257620b853beebd3a3d7a74f9",
+      "alignment": "source_identity_and_scoring_metadata",
+      "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+    },
+    {
+      "uk_task": "winobias_uk_natural",
+      "en_task": "winobias_en_natural",
+      "matched_rows": 558,
+      "excluded_uk_rows": 1116,
+      "filename": "pairs/winobias_uk_natural.jsonl",
+      "sha256": "fa2c91dc41ad304f44d0994c9987c8a41642eb8626ebead69b1d757b90d6ef34",
+      "alignment": "source_identity_and_scoring_metadata",
+      "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+    },
+    {
+      "uk_task": "winobias_uk_controlled",
+      "en_task": "winobias_en_controlled",
+      "matched_rows": 1580,
+      "excluded_uk_rows": 0,
+      "filename": "pairs/winobias_uk_controlled.jsonl",
+      "sha256": "db5d8cbb42b39d0ffc9f294c0e9e186c7e52b5d620e7edc7bece11c81ad7b370",
+      "alignment": "source_identity_and_scoring_metadata",
+      "interpretation": "Language plus adaptation; mechanical matching does not establish translation validity."
+    }
+  ]
+}

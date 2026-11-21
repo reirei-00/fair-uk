@@ -123,7 +123,7 @@ Removing `--dry-run` executes. `--max-estimated-usd` checks an estimate, not an 
 
 ## Bilingual data
 
-WarBias UK/EN tasks are public. The other four English tasks require an **unpublished local bundle**, adding `bbq_en`, `stereoset_en`, `winobias_en_natural` and `winobias_en_controlled`, alongside their matching Ukrainian inputs. This gives twelve tasks and six matched comparisons; requesting missing counterparts without a bundle blocks execution.
+The registered release `matched-en-v1` supplies `bbq_en`, `stereoset_en`, `winobias_en_natural` and `winobias_en_controlled` with their Ukrainian counterparts. Its manifest pins the source files, scoring protocols, item counts and bilingual pair maps. [Release manifest](../lm_eval/fair_uk/matched-en-v1.json)
 
 | Family | Ukrainian rows | Matched English rows | Exclusions |
 | --- | ---: | ---: | --- |
@@ -132,16 +132,15 @@ WarBias UK/EN tasks are public. The other four English tasks require an **unpubl
 | WinoBias Natural | 1,674 | 558 | 1,116 UK agreement/cross controls have no original EN counterpart |
 | WinoBias Controlled | 1,580 | 1,580 | None within the pinned test split |
 
-Reconstruct a bundle from the existing project source package:
+List the registered panels, then install their data from the project source package.
 
 ```sh
-python -m lm_eval.fair_uk.bilingual \
-  --source-root /path/to/fairForget --output /path/to/new-empty-bundle
-fair-uk-eval suite --languages uk en \
-  --dataset-bundle /path/to/new-empty-bundle/manifest.json
+fair-uk-eval list --dataset-bundle matched-en-v1 --language en
+python -m lm_eval.fair_uk.matched_release --source-root /path/to/fairForget
+fair-uk-eval suite --languages uk en --dataset-bundle matched-en-v1
 ```
 
-The source root must preserve the layout in [`bilingual.py`](../lm_eval/fair_uk/bilingual.py): pinned Ukrainian exports, original BBQ/StereoSet sources and source-commit records, and existing WinoBias source/construction records. **This repository alone cannot reconstruct the bundle** until those dependencies or a reviewed bundle are distributed. Preparation performs no inference, translation or downloads and reads no provider credentials.
+The installer checks the reconstructed manifest against the registration and verifies every dataset and pair map before placing it under `~/.cache/fair-uk/matched-en-v1/`. Set `FAIR_UK_DATA_HOME` to use a different parent directory. On a cluster, copy the verified directory and pass its `manifest.json` to Fair-UK versions that accept explicit bundles. The source package contains pinned Ukrainian exports, original BBQ and StereoSet sources and WinoBias construction records. [Source layout](../lm_eval/fair_uk/bilingual.py)
 
 Preparation matches BBQ category/example IDs and answer metadata, StereoSet original IDs and semantic candidate labels, and WinoBias split/type/line IDs with construction lineage. Both languages retain common scoring/grouping metadata. WinoBias removes gold antecedent brackets; Controlled marks only the queried pronoun. Canonical occupation labels avoid a gold-option formatting cue. Mechanical alignment does not establish translation validity.
 

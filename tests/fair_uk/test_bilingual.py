@@ -244,6 +244,28 @@ def test_explicit_bundle_is_checked_without_mutating_registry(tmp_path):
         load("stereoset_en", bundle=manifest)
 
 
+def test_registered_release_checks_installed_manifest_and_data(tmp_path, monkeypatch):
+    from lm_eval.fair_uk import matched_release
+
+    monkeypatch.setenv("FAIR_UK_DATA_HOME", str(tmp_path))
+    name = matched_release.NAME
+    assert bundle_registry(name)["winobias_en_natural"]["rows"] == 558
+    with pytest.raises(FileNotFoundError, match="Install"):
+        load("stereoset_en", bundle=name)
+    installed = tmp_path / name
+    installed.mkdir()
+    manifest, data, _ = make_bundle(installed)
+    with pytest.raises(ValueError, match="differs from registered release"):
+        load("stereoset_en", bundle=name)
+    reference = tmp_path / "registration.json"
+    reference.write_bytes(manifest.read_bytes())
+    monkeypatch.setattr(matched_release, "REGISTRATION", reference)
+    assert load("stereoset_en", bundle=name)[0]["id"] == "s1"
+    data.write_text("{}\n")
+    with pytest.raises(ValueError, match="checksum differs"):
+        load("stereoset_en", bundle=name)
+
+
 def test_bundle_rejects_tampered_mapping_and_path_escape(tmp_path):
     manifest, _, pairs = make_bundle(tmp_path)
     pairs.write_text(pairs.read_text().replace("s1", "s2"))
